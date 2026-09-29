@@ -35,6 +35,7 @@ export type EvidenceItem = {
   matched_sender_capability: string;
   capability_status: "live" | "preview" | "planned" | "unclear";
   confidence: "high" | "medium" | "low";
+  selected: boolean;
 };
 
 export type Target = {
@@ -232,24 +233,26 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const emails = [...new Set(uniq.flatMap((p) => extractEmails(p.html, domain)))].slice(0, 15);
       const corpus = uniq.map((p) => `URL: ${p.url}\n${htmlToText(p.html, 3000)}`).join("\n---\n").slice(0, 22000);
       const an = data.analysis;
-      const caps = an.capability_status.map((c) => `${c.capability} [${c.status}]`).join("; ") || "(none listed)";
+      const caps = an.capability_status.map((c) => `${c.capability} [${c.status}]${c.evidence ? `: ${c.evidence}` : ""}`).join("\n- ") || "(none listed)";
+      const nonLive = an.capability_status.filter((c) => c.status !== "live").map((c) => c.capability).filter((c) => c.length >= 4);
+      const senderEvidence = [an.value_proposition, an.what_it_does, ...an.pricing_summary, ...an.differentiators, ...an.proof_points, ...an.capability_status.map((c) => `${c.capability} ${c.evidence}`)].join(" ").toLowerCase();
 
-      const r = await aiJson<{
-        contact_name: string | null;
-        contact_title: string | null;
-        email: string | null;
-        source_url: string | null;
-        evidence_map: EvidenceItem[];
-        subject: string;
-        body: string;
-      }>(
-        "You research B2B prospects and write short, specific cold outreach emails. Use ONLY facts present in the provided page text. Never invent people, email addresses, prices, capabilities or problems. Never assume a problem merely because the industry commonly has it — every inference must follow from an observed fact on their site.",
-        `Target company: ${data.target.name} (${domain}) — ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSender: ${data.sender.name} <${data.sender.email}>\nSender's product: ${an.business_name} (${data.website}) — ${an.one_liner}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nSender capabilities with status: ${caps}\nDifferentiators: ${an.differentiators.join("; ") || "(none stated)"}\n\nTasks:\n1. Build evidence_map (2-5 items) BEFORE writing. Each item: observed_fact (something literally on their pages), source_url (the exact page URL above where it appears), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, otherwise "INFERENCE" — an inference must follow directly from the observed_fact), consequence (what that friction costs them), role_relevance (which role there cares and why), matched_sender_capability (only from the sender capabilities list; "none" if no match), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"). Skip items you can't ground in the page text.\n2. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs are fine for small firms). If no person is named, contact_name and contact_title are null.\n3. Pick the best email ONLY from the "Emails found" list (a personal address for that person if present, otherwise the most relevant general inbox like hello@/info@/sales@). If the list is empty, email is null.\n4. source_url: the page URL where the person or email appeared, or null.\n5. Write a personalized cold email from the sender: subject (max 8 words, no clickbait) and body (90-140 words, plain text). Greet the contact by first name if known, else "Hi ${data.target.name} team". Build it on the highest-confidence evidence_map item: reference its observed fact, then the friction (phrase inferences tentatively, e.g. "I imagine…"), and only pitch capabilities whose status is live (never present preview/planned features as available). Make the pitch with ALL three of these points: (a) the first event is completely free and unrestricted — no credit card or personal details required; (b) it runs in parallel with their existing workflow without changing or modifying how they work; (c) onboarding takes as little as 5 minutes. STRICT RULES: NEVER offer or mention a call of any kind — no 15-minute call, phone call, demo call, Zoom, or meeting. The ONLY call to action is to reply to this email or check out the platform at ${data.website}. Sign off with the sender's name and website. Include a final line: "If this isn't relevant, just reply and I won't follow up." No placeholders in brackets.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, subject, body.`,
-        "medium",
-      );
+      type Draft = { contact_name: string | null; contact_title: string | null; email: string | null; source_url: string | null; evidence_map: (EvidenceItem & { selected?: boolean })[]; subject: string; body: string };
+      const system =
+        "You research B2B prospects and write short, specific, pain-first cold outreach emails. Use ONLY facts present in the provided page text. Never invent people, email addresses, prices, offers, capabilities or problems. Never assume a problem merely because the industry commonly has it. Every inference must follow from an observed fact on their site.";
+      const prompt = `Target company: ${data.target.name} (${domain}), ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSENDER (all commercial facts below are verified from the sender's own site; nothing else may be claimed)\nSender: ${data.sender.name} <${data.sender.email}>\nProduct: ${an.business_name} (${data.website}): ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nDifferentiators / moat: ${an.differentiators.join("; ") || "(none stated)"}\nPricing (verified): ${an.pricing_summary.join("; ") || "(none found, so make NO pricing, free, trial, credit-card or plan claims)"}\nProof points (verified): ${an.proof_points.join("; ") || "(none found)"}\nCapabilities with status:\n- ${caps}\n\nTasks:\n1. Build evidence_map (3-6 items) BEFORE writing. Each item: observed_fact (literally on their pages), source_url (exact page URL above), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, else "INFERENCE" that follows directly from the observed_fact), consequence (practical cost in their terms), role_relevance, matched_sender_capability (only from the sender capabilities list, or "none"), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"), selected (true for the 2-3 items you will use in the email; 4 only if evidence is unusually strong). Rank for selection by: operational cost/frustration, recurrence, relevance to the chosen contact, evidence confidence, strength of sender match. Only select items whose matched capability is live. Skip anything you can't ground in the page text.\n2. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n3. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n4. source_url: page URL where the person or email appeared, or null.\n5. Write the email. Subject: max 8 words, specific to this prospect. Body: 120-190 words, plain text, human, concise, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.\nSTRICT RULES:\n- Any claim about price, free events/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform", or lists like "clients, crew, equipment, compliance and finance".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, subject, body.`;
+
+      let r = await aiJson<Draft>(system, prompt, "medium");
+      const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
+      const offending = hasNonLive(String(r.body ?? ""));
+      if (offending.length) {
+        // One corrective regeneration when non-live capabilities are named in the body.
+        r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: a previous draft mentioned these non-live capabilities: ${offending.join(", ")}. Do not mention them at all.`, "medium");
+      }
 
       const pageUrls = new Set(uniq.map((p) => p.url));
       const pick = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts.includes(v as T) ? (v as T) : d);
+      const rank = { high: 0, medium: 1, low: 2 } as const;
       const evidence_map: EvidenceItem[] = (Array.isArray(r.evidence_map) ? r.evidence_map : [])
         .filter((e) => e && e.observed_fact && pageUrls.has(e.source_url))
         .slice(0, 6)
@@ -263,7 +266,32 @@ export const researchAndDraft = createServerFn({ method: "POST" })
           matched_sender_capability: String(e.matched_sender_capability ?? "").slice(0, 200),
           capability_status: pick(e.capability_status, ["live", "preview", "planned", "unclear"] as const, "unclear"),
           confidence: pick(e.confidence, ["high", "medium", "low"] as const, "low"),
-        }));
+          selected: e.selected === true,
+        }))
+        .sort((a, b) => Number(b.selected) - Number(a.selected) || rank[a.confidence] - rank[b.confidence]);
+
+      // Guardrails on the final text.
+      const noDash = (t: string) => t.replace(/\s*[\u2014\u2013]\s*/g, ", ").replace(/ ,/g, ",").replace(/,\s*,/g, ",");
+      const sentences = (t: string, keep: (x: string) => boolean) =>
+        t
+          .split("\n")
+          .map((line) => (line.match(/[^.!?]+[.!?]*\s*/g) ?? [line]).filter(keep).join("").trimEnd())
+          .join("\n");
+      const CLAIMS: [RegExp, RegExp][] = [
+        [/credit card/i, /credit card/],
+        [/personal details/i, /personal details/],
+        [/\bfree\b/i, /\bfree\b/],
+        [/\btrial\b/i, /\btrial\b/],
+        [/\b\d+\s*(minutes?|mins?)\b/i, /\d+\s*(minutes?|mins?)/],
+        [/[$\u00a3\u20ac]\s?\d/, /[$\u00a3\u20ac]\s?\d/],
+      ];
+      let body = noDash(String(r.body ?? ""));
+      body = sentences(body, (x) => {
+        if (/reply and i won't follow up/i.test(x)) return true;
+        if (hasNonLive(x).length) return false;
+        return CLAIMS.every(([inText, inEvidence]) => !inText.test(x) || inEvidence.test(senderEvidence));
+      });
+      const subject = noDash(String(r.subject ?? ""));
       const lowerCorpus = corpus.toLowerCase();
       const email = r.email && emails.includes(r.email.toLowerCase()) ? r.email.toLowerCase() : emails.find((e) => e.endsWith(domain)) ?? null;
       const name = r.contact_name && lowerCorpus.includes(r.contact_name.toLowerCase().split(" ").pop() ?? "~~") ? r.contact_name.slice(0, 120) : null;
@@ -277,8 +305,8 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         emails_found: emails,
         pages_read: uniq.map((p) => p.url),
         evidence_map,
-        subject: String(r.subject ?? "").slice(0, 200),
-        body: String(r.body ?? "").slice(0, 4000),
+        subject: subject.slice(0, 200),
+        body: body.slice(0, 4000),
       };
     }),
   );
