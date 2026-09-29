@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { aiJson, AiError } from "./ai.server";
-import { extractEmails, extractLinks, fetchPage, hostOf, htmlToText, pageMeta } from "./web.server";
+import { extractEmails, extractLinks, fetchPage, fetchText, hostOf, htmlToText, pageMeta, rankedLinks } from "./web.server";
 
 export type Analysis = {
   business_name: string;
@@ -13,6 +13,28 @@ export type Analysis = {
   target_industries: string[];
   target_titles: string[];
   pain_points: string[];
+  differentiators: string[];
+  pricing_summary: string[];
+  capability_status: CapabilityStatus[];
+  proof_points: string[];
+};
+
+export type CapabilityStatus = {
+  capability: string;
+  status: "live" | "preview" | "planned" | "unclear";
+  evidence: string;
+};
+
+export type EvidenceItem = {
+  observed_fact: string;
+  source_url: string;
+  likely_operational_friction: string;
+  classification: "FACT" | "INFERENCE";
+  consequence: string;
+  role_relevance: string;
+  matched_sender_capability: string;
+  capability_status: "live" | "preview" | "planned" | "unclear";
+  confidence: "high" | "medium" | "low";
 };
 
 export type Target = {
@@ -31,6 +53,8 @@ export type ContactResult = {
   email_type: "person" | "generic" | "none";
   source_url: string | null;
   emails_found: string[];
+  pages_read: string[];
+  evidence_map: EvidenceItem[];
   subject: string;
   body: string;
 };
@@ -61,7 +85,23 @@ const analysisSchema = z.object({
   target_industries: z.array(z.string().max(120)).max(12),
   target_titles: z.array(z.string().max(120)).max(12),
   pain_points: z.array(z.string().max(300)).max(12),
+  differentiators: z.array(z.string().max(300)).max(10).default([]),
+  pricing_summary: z.array(z.string().max(300)).max(10).default([]),
+  capability_status: z
+    .array(
+      z.object({
+        capability: z.string().max(200),
+        status: z.enum(["live", "preview", "planned", "unclear"]).catch("unclear"),
+        evidence: z.string().max(400),
+      }),
+    )
+    .max(15)
+    .default([]),
+  proof_points: z.array(z.string().max(300)).max(10).default([]),
 });
+
+const SENDER_KEYWORDS = ["pricing", "plans", "features", "product", "platform", "solutions", "capabilities", "integrations", "automation", "ai", "agents", "security", "faq", "docs", "about", "industries", "use-cases", "case-studies"];
+const TARGET_KEYWORDS = ["about", "services", "projects", "case-studies", "portfolio", "hire", "rental", "production", "team", "careers", "jobs", "contact", "technical", "service", "work", "events", "clients"];
 
 export const analyzeBusiness = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -74,12 +114,23 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
       const home = (await fetchPage(`https://${host}`)) ?? (await fetchPage(`https://www.${host}`));
       if (!home) throw new Error(`Couldn't open https://${host}. Check the address and that the site is public.`);
       const meta = pageMeta(home.html);
-      const extra = extractLinks(home.html, home.url).slice(0, 2);
-      const pages = (await Promise.all(extra.map((u) => fetchPage(u, 5000)))).filter(Boolean) as { html: string }[];
-      const text = [htmlToText(home.html, 7000), ...pages.map((p) => htmlToText(p.html, 2500))].join("\n---\n");
+      // Crawl a bounded, prioritised set of internal pages (max 8) plus /llms.txt.
+      const links = rankedLinks(home.html, home.url, SENDER_KEYWORDS, 8);
+      const [pages, llms] = await Promise.all([
+        Promise.all(links.map((u) => fetchPage(u, 6000))),
+        fetchText(`${new URL(home.url).origin}/llms.txt`),
+      ]);
+      const got = pages.filter(Boolean) as { url: string; html: string }[];
+      const text = [
+        `URL: ${home.url}\n${htmlToText(home.html, 6000)}`,
+        ...(llms ? [`URL: ${new URL(home.url).origin}/llms.txt\n${llms.slice(0, 5000)}`] : []),
+        ...got.map((p) => `URL: ${p.url}\n${htmlToText(p.html, 2500)}`),
+      ]
+        .join("\n---\n")
+        .slice(0, 26000);
       const a = await aiJson<Analysis>(
-        "You are a B2B go-to-market analyst. Read a company's website text and explain precisely what the business sells, to whom, and who would benefit most. Be concrete; never invent features not supported by the text.",
-        `Website: https://${host}\nTitle: ${meta.title}\nMeta description: ${meta.description}\n\nPage text:\n${text}\n\nReturn JSON with keys: business_name, one_liner (max 25 words), what_it_does (2-4 sentences), value_proposition (1-2 sentences), ideal_customers (4-6 concrete customer profiles), target_industries (4-8), target_titles (3-6 decision-maker job titles who would buy), pain_points (3-5 problems it solves).`,
+        "You are a B2B go-to-market analyst. Read a company's website text and explain precisely what the business sells, to whom, and who would benefit most. Use ONLY facts present in the text. Never invent features, prices, customers, metrics, testimonials or product status. If something isn't stated, leave it out (empty array) or mark status 'unclear'.",
+        `Website: https://${host}\nTitle: ${meta.title}\nMeta description: ${meta.description}\n\nPages:\n${text}\n\nReturn JSON with keys: business_name, one_liner (max 25 words), what_it_does (2-4 sentences), value_proposition (1-2 sentences), ideal_customers (4-6 concrete customer profiles), target_industries (4-8), target_titles (3-6 decision-maker job titles who would buy), pain_points (3-5 problems it solves), differentiators (what the site says sets it apart; [] if none stated), pricing_summary (exact plans/prices/free tiers as stated; [] if no pricing on the site), capability_status (array of {capability, status: "live"|"preview"|"planned"|"unclear", evidence: short quote or paraphrase + page URL}; "preview" = beta/early access, "planned" = coming soon/roadmap, "unclear" when the site doesn't say), proof_points (customer names, testimonials, metrics, awards explicitly on the site; [] if none).`,
         "medium",
       );
       return { website: `https://${host}`, analysis: analysisSchema.parse(a) };
@@ -172,25 +223,47 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const domain = hostOf(data.target.domain);
       if (!domain) throw new Error("Invalid company domain");
       const home = await fetchPage(`https://${domain}`, 7000);
-      const links = home ? extractLinks(home.html, home.url) : [];
-      const fallbacks = ["/contact", "/about", "/team", "/about-us", "/contact-us"].map((p) => `https://${domain}${p}`);
-      const urls = [...new Set([...links, ...fallbacks])].slice(0, 5);
+      const ranked = home ? rankedLinks(home.html, home.url, TARGET_KEYWORDS, 8) : [];
+      const basic = home ? extractLinks(home.html, home.url) : [];
+      const fallbacks = ["/about", "/contact", "/services", "/team", "/about-us", "/contact-us"].map((p) => `https://${domain}${p}`);
+      const urls = [...new Set([...ranked, ...basic, ...fallbacks])].filter((u) => u !== home?.url).slice(0, 9);
       const pages = [home, ...(await Promise.all(urls.map((u) => fetchPage(u, 6000))))].filter(Boolean) as { url: string; html: string }[];
-      const emails = [...new Set(pages.flatMap((p) => extractEmails(p.html, domain)))].slice(0, 15);
-      const corpus = pages.map((p) => `URL: ${p.url}\n${htmlToText(p.html, 2500)}`).join("\n---\n").slice(0, 12000);
+      const uniq = pages.filter((p, i) => pages.findIndex((q) => q.url === p.url) === i);
+      const emails = [...new Set(uniq.flatMap((p) => extractEmails(p.html, domain)))].slice(0, 15);
+      const corpus = uniq.map((p) => `URL: ${p.url}\n${htmlToText(p.html, 3000)}`).join("\n---\n").slice(0, 22000);
+      const an = data.analysis;
+      const caps = an.capability_status.map((c) => `${c.capability} [${c.status}]`).join("; ") || "(none listed)";
 
       const r = await aiJson<{
         contact_name: string | null;
         contact_title: string | null;
         email: string | null;
         source_url: string | null;
+        evidence_map: EvidenceItem[];
         subject: string;
         body: string;
       }>(
-        "You research B2B prospects and write short, specific cold outreach emails. Use ONLY facts present in the provided page text. Never invent people or email addresses.",
-        `Target company: ${data.target.name} (${domain}) — ${data.target.industry}, ${data.target.country}\nWhy they fit: ${data.target.why_fit}\n\nPreferred decision-maker titles: ${data.analysis.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSender: ${data.sender.name} <${data.sender.email}>\nSender's product: ${data.analysis.business_name} (${data.website}) — ${data.analysis.one_liner}\nValue proposition: ${data.analysis.value_proposition}\nPain points solved: ${data.analysis.pain_points.join("; ")}\n\nTasks:\n1. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs are fine for small firms). If no person is named, contact_name and contact_title are null.\n2. Pick the best email ONLY from the "Emails found" list (a personal address for that person if present, otherwise the most relevant general inbox like hello@/info@/sales@). If the list is empty, email is null.\n3. source_url: the page URL where the person or email appeared, or null.\n4. Write a personalized cold email from the sender: subject (max 8 words, no clickbait) and body (90-140 words, plain text). Greet the contact by first name if known, else "Hi ${data.target.name} team". Reference one concrete detail about their business from the page text, connect it to one pain point, then make the pitch with ALL three of these points: (a) the first event is completely free and unrestricted — no credit card or personal details required; (b) it runs in parallel with their existing workflow without changing or modifying how they work; (c) onboarding takes as little as 5 minutes. STRICT RULES: NEVER offer or mention a call of any kind — no 15-minute call, phone call, demo call, Zoom, or meeting. The ONLY call to action is to reply to this email or check out the platform at ${data.website}. Sign off with the sender's name and website. Include a final line: "If this isn't relevant, just reply and I won't follow up." No placeholders in brackets.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, subject, body.`,
+        "You research B2B prospects and write short, specific cold outreach emails. Use ONLY facts present in the provided page text. Never invent people, email addresses, prices, capabilities or problems. Never assume a problem merely because the industry commonly has it — every inference must follow from an observed fact on their site.",
+        `Target company: ${data.target.name} (${domain}) — ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSender: ${data.sender.name} <${data.sender.email}>\nSender's product: ${an.business_name} (${data.website}) — ${an.one_liner}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nSender capabilities with status: ${caps}\nDifferentiators: ${an.differentiators.join("; ") || "(none stated)"}\n\nTasks:\n1. Build evidence_map (2-5 items) BEFORE writing. Each item: observed_fact (something literally on their pages), source_url (the exact page URL above where it appears), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, otherwise "INFERENCE" — an inference must follow directly from the observed_fact), consequence (what that friction costs them), role_relevance (which role there cares and why), matched_sender_capability (only from the sender capabilities list; "none" if no match), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"). Skip items you can't ground in the page text.\n2. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs are fine for small firms). If no person is named, contact_name and contact_title are null.\n3. Pick the best email ONLY from the "Emails found" list (a personal address for that person if present, otherwise the most relevant general inbox like hello@/info@/sales@). If the list is empty, email is null.\n4. source_url: the page URL where the person or email appeared, or null.\n5. Write a personalized cold email from the sender: subject (max 8 words, no clickbait) and body (90-140 words, plain text). Greet the contact by first name if known, else "Hi ${data.target.name} team". Build it on the highest-confidence evidence_map item: reference its observed fact, then the friction (phrase inferences tentatively, e.g. "I imagine…"), and only pitch capabilities whose status is live (never present preview/planned features as available). Make the pitch with ALL three of these points: (a) the first event is completely free and unrestricted — no credit card or personal details required; (b) it runs in parallel with their existing workflow without changing or modifying how they work; (c) onboarding takes as little as 5 minutes. STRICT RULES: NEVER offer or mention a call of any kind — no 15-minute call, phone call, demo call, Zoom, or meeting. The ONLY call to action is to reply to this email or check out the platform at ${data.website}. Sign off with the sender's name and website. Include a final line: "If this isn't relevant, just reply and I won't follow up." No placeholders in brackets.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, subject, body.`,
+        "medium",
       );
 
+      const pageUrls = new Set(uniq.map((p) => p.url));
+      const pick = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts.includes(v as T) ? (v as T) : d);
+      const evidence_map: EvidenceItem[] = (Array.isArray(r.evidence_map) ? r.evidence_map : [])
+        .filter((e) => e && e.observed_fact && pageUrls.has(e.source_url))
+        .slice(0, 6)
+        .map((e) => ({
+          observed_fact: String(e.observed_fact).slice(0, 400),
+          source_url: e.source_url,
+          likely_operational_friction: String(e.likely_operational_friction ?? "").slice(0, 400),
+          classification: pick(e.classification, ["FACT", "INFERENCE"] as const, "INFERENCE"),
+          consequence: String(e.consequence ?? "").slice(0, 400),
+          role_relevance: String(e.role_relevance ?? "").slice(0, 300),
+          matched_sender_capability: String(e.matched_sender_capability ?? "").slice(0, 200),
+          capability_status: pick(e.capability_status, ["live", "preview", "planned", "unclear"] as const, "unclear"),
+          confidence: pick(e.confidence, ["high", "medium", "low"] as const, "low"),
+        }));
       const lowerCorpus = corpus.toLowerCase();
       const email = r.email && emails.includes(r.email.toLowerCase()) ? r.email.toLowerCase() : emails.find((e) => e.endsWith(domain)) ?? null;
       const name = r.contact_name && lowerCorpus.includes(r.contact_name.toLowerCase().split(" ").pop() ?? "~~") ? r.contact_name.slice(0, 120) : null;
@@ -200,8 +273,10 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         contact_title: name ? (r.contact_title?.slice(0, 120) ?? null) : null,
         email,
         email_type: email ? (generic ? "generic" : "person") : "none",
-        source_url: r.source_url && pages.some((p) => p.url === r.source_url) ? r.source_url : (pages[0]?.url ?? null),
+        source_url: r.source_url && pageUrls.has(r.source_url) ? r.source_url : (uniq[0]?.url ?? null),
         emails_found: emails,
+        pages_read: uniq.map((p) => p.url),
+        evidence_map,
         subject: String(r.subject ?? "").slice(0, 200),
         body: String(r.body ?? "").slice(0, 4000),
       };
