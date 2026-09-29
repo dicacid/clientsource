@@ -77,28 +77,36 @@ function wrap<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
+// The AI sometimes returns objects instead of strings in lists; flatten them to text.
+const toText = (v: unknown): string =>
+  typeof v === "string" ? v : v && typeof v === "object" ? Object.values(v as Record<string, unknown>).map(toText).filter(Boolean).join(": ") : v == null ? "" : String(v);
+const strList = (itemMax: number, n: number) =>
+  z.preprocess(
+    (v) => (Array.isArray(v) ? v.map(toText).filter(Boolean).map((x) => x.slice(0, itemMax)).slice(0, n) : []),
+    z.array(z.string().max(itemMax)).max(n),
+  );
+
 const analysisSchema = z.object({
-  business_name: z.string().max(200),
-  one_liner: z.string().max(500),
-  what_it_does: z.string().max(3000),
-  value_proposition: z.string().max(2000),
-  ideal_customers: z.array(z.string().max(300)).max(12),
-  target_industries: z.array(z.string().max(120)).max(12),
-  target_titles: z.array(z.string().max(120)).max(12),
-  pain_points: z.array(z.string().max(300)).max(12),
-  differentiators: z.array(z.string().max(300)).max(10).default([]),
-  pricing_summary: z.array(z.string().max(300)).max(10).default([]),
-  capability_status: z
+  business_name: z.preprocess((v) => toText(v).slice(0, 200), z.string()),
+  one_liner: z.preprocess((v) => toText(v).slice(0, 500), z.string()),
+  what_it_does: z.preprocess((v) => toText(v).slice(0, 3000), z.string()),
+  value_proposition: z.preprocess((v) => toText(v).slice(0, 2000), z.string()),
+  ideal_customers: strList(300, 12),
+  target_industries: strList(120, 12),
+  target_titles: strList(120, 12),
+  pain_points: strList(300, 12),
+  differentiators: strList(300, 10),
+  pricing_summary: strList(300, 10),
+  capability_status: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 15) : []), z
     .array(
       z.object({
-        capability: z.string().max(200),
+        capability: z.preprocess((v) => toText(v).slice(0, 200), z.string()),
         status: z.enum(["live", "preview", "planned", "unclear"]).catch("unclear"),
-        evidence: z.string().max(400),
+        evidence: z.preprocess((v) => toText(v).slice(0, 400), z.string()),
       }),
     )
-    .max(15)
-    .default([]),
-  proof_points: z.array(z.string().max(300)).max(10).default([]),
+    .max(15)),
+  proof_points: strList(300, 10),
 });
 
 const SENDER_KEYWORDS = ["pricing", "plans", "features", "product", "platform", "solutions", "capabilities", "integrations", "automation", "ai", "agents", "security", "faq", "docs", "about", "industries", "use-cases", "case-studies"];
@@ -131,7 +139,7 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
         .slice(0, 26000);
       const a = await aiJson<Analysis>(
         "You are a B2B go-to-market analyst. Read a company's website text and explain precisely what the business sells, to whom, and who would benefit most. Use ONLY facts present in the text. Never invent features, prices, customers, metrics, testimonials or product status. If something isn't stated, leave it out (empty array) or mark status 'unclear'.",
-        `Website: https://${host}\nTitle: ${meta.title}\nMeta description: ${meta.description}\n\nPages:\n${text}\n\nReturn JSON with keys: business_name, one_liner (max 25 words), what_it_does (2-4 sentences), value_proposition (1-2 sentences), ideal_customers (4-6 concrete customer profiles), target_industries (4-8), target_titles (3-6 decision-maker job titles who would buy), pain_points (3-5 problems it solves), differentiators (what the site says sets it apart; [] if none stated), pricing_summary (exact plans/prices/free tiers as stated; [] if no pricing on the site), capability_status (array of {capability, status: "live"|"preview"|"planned"|"unclear", evidence: short quote or paraphrase + page URL}; "preview" = beta/early access, "planned" = coming soon/roadmap, "unclear" when the site doesn't say), proof_points (customer names, testimonials, metrics, awards explicitly on the site; [] if none).`,
+        `Website: https://${host}\nTitle: ${meta.title}\nMeta description: ${meta.description}\n\nPages:\n${text}\n\nReturn JSON with keys: business_name, one_liner (max 25 words), what_it_does (2-4 sentences), value_proposition (1-2 sentences), ideal_customers (4-6 concrete customer profiles), target_industries (4-8), target_titles (3-6 decision-maker job titles who would buy), pain_points (3-5 problems it solves), differentiators (what the site says sets it apart; [] if none stated), pricing_summary (exact plans/prices/free tiers as stated; [] if no pricing on the site), capability_status (array of {capability, status: "live"|"preview"|"planned"|"unclear", evidence: short quote or paraphrase + page URL}; "live" = described as a current feature or included in a listed paid/free plan, "preview" = explicitly beta/early access, "planned" = explicitly coming soon/roadmap, "unclear" only when the site gives no indication either way; a generic legal/FAQ disclaimer does not make every feature unclear), proof_points (customer names, testimonials, metrics, awards explicitly on the site; [] if none).`,
         "medium",
       );
       return { website: `https://${host}`, analysis: analysisSchema.parse(a) };
