@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut } from "lucide-react";
+import { Sparkles, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut } from "lucide-react";
 import { resolveMembership, signOut } from "@/lib/session";
 import { label } from "@/lib/constants";
 
@@ -15,6 +15,7 @@ export const Route = createFileRoute("/_authenticated/_app")({
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/prospect", label: "Prospect finder", icon: Sparkles },
   { to: "/companies", label: "Companies", icon: Building2 },
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/import", label: "Import", icon: FileUp },
