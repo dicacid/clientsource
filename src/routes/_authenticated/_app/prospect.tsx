@@ -264,6 +264,19 @@ function ProspectPage() {
           <Label htmlFor="p-site">Your business website</Label>
           <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="cadenceops.app" />
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-region">Target region</Label>
+          <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
+            <SelectTrigger id="p-region">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="domestic">Domestic (Australia)</SelectItem>
+              <SelectItem value="international">International</SelectItem>
+              <SelectItem value="both">Both</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Button type="submit" disabled={busy} className="gap-2">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           Find prospects
