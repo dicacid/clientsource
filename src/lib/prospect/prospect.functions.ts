@@ -94,6 +94,7 @@ export const discoverTargets = createServerFn({ method: "POST" })
         website: z.string().max(300),
         analysis: analysisSchema,
         exclude: z.array(z.string().max(200)).max(200).default([]),
+        region: z.enum(["domestic", "international", "both"]).default("domestic"),
       })
       .parse(d),
   )
