@@ -110,32 +110,7 @@ const analysisSchema = z.object({
 });
 
 const SENDER_KEYWORDS = ["pricing", "plans", "features", "product", "platform", "solutions", "capabilities", "integrations", "automation", "ai", "agents", "security", "faq", "docs", "about", "industries", "use-cases", "case-studies"];
-const TARGET_KEYWORDS = ["about", "services", "projects", "case-studies", "portfolio", "hire", "rental", "production", "team", "careers", "jobs", "contact", "technical", "service", "work", "events", "clients"];
-
-// Operator-approved campaign claims, scoped to the sender domain, not inferred from any prospect page.
-const cadenceOpsAdoption = (website: string) => hostOf(website) === "cadenceops.app";
-const hasAdoptionReassurance = (body: string) =>
-  /(?:no need to|don't need to|wouldn't need to|without|keep|continue|not required to|does not require|doesn't require|don't have to|wouldn't have to)[^.!?\n]{0,100}(?:replac|migrat|chang|existing|current|already using)/i.test(body) &&
-  /(?:alongside|in parallel|side by side|side-by-side)/i.test(body) &&
-  /(?:about|around|roughly|approximately|as little as|within|in)\s+(?:five|5)\s+minut/i.test(body);
-
-function adoptionFallback(domain: string) {
-  const options = [
-    "You can keep the tools and process you already use. CadenceOps runs alongside them in parallel, and getting started takes about five minutes.",
-    "There's no need to change your current workflow to try CadenceOps. It can run in parallel with what you already use, with setup taking around five minutes.",
-    "You wouldn't have to replace your existing tools. CadenceOps can work alongside your current process, and you can get started in about five minutes.",
-  ];
-  const hash = [...domain].reduce((n, c) => n + c.charCodeAt(0), 0);
-  return options[hash % options.length] ?? options[0] ?? "";
-}
-
-function ensureAdoptionReassurance(body: string, domain: string) {
-  if (hasAdoptionReassurance(body)) return body;
-  const lines = body.split("\n");
-  const cta = lines.findIndex((line) => /\b(reply|visit|check out|take a look at)\b/i.test(line) && !/won't follow up/i.test(line));
-  lines.splice(cta >= 0 ? cta : Math.max(0, lines.length - 2), 0, adoptionFallback(domain), "");
-  return lines.join("\n");
-}
+const TARGET_KEYWORDS = ["about", "services", "products", "solutions", "team", "careers", "jobs", "case-studies", "clients", "contact", "pricing", "industries", "projects", "portfolio", "work", "service"];
 
 export const analyzeBusiness = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -185,24 +160,21 @@ export const discoverTargets = createServerFn({ method: "POST" })
   )
   .handler(({ data, context }) =>
     wrap(async () => {
-      const orgId = await assertMember(context);
-      const { data: existing } = await context.supabase.from("companies").select("website").eq("organization_id", orgId).not("website", "is", null).limit(2000);
-      const skip = new Set<string>([
-        hostOf(data.website) ?? "",
-        ...data.exclude.map((d) => hostOf(d) ?? d),
-        ...((existing ?? []) as { website: string }[]).map((c) => hostOf(c.website) ?? ""),
-      ]);
+      await assertMember(context);
+      // Only the sender's own domain and domains already seen in this run are excluded.
+      const skip = new Set<string>([hostOf(data.website) ?? "", ...data.exclude.map((d) => hostOf(d) ?? d)]);
       const AU_RE = /australia|sydney|melbourne|brisbane|perth|adelaide|gold coast|canberra|hobart|darwin/i;
       const isAu = (c: { domain: string; country?: string }) => c.domain.endsWith(".au") || AU_RE.test(String(c.country ?? ""));
       const locationRule =
         data.region === "domestic"
-          ? "STRICT LOCATION RULE: every company MUST be based in Australia — Australian event production companies, AV / sound and lighting hire firms, festival teams, and event agencies. Prefer .com.au domains or companies clearly located in Australian cities (Sydney, Melbourne, Brisbane, Perth, Adelaide, Gold Coast, etc.). NEVER include overseas companies. Set country to \"Australia\" for every item."
+          ? "STRICT LOCATION RULE: every company MUST be based in Australia. Prefer .com.au / .au domains or companies clearly located in Australian cities. NEVER include overseas companies. Set country to \"Australia\" for every item."
           : data.region === "international"
-            ? "STRICT LOCATION RULE: every company MUST be based OUTSIDE Australia — event production companies, AV / sound and lighting hire firms, festival teams, and event agencies in other countries (e.g. UK, USA, Europe, New Zealand, Asia). NEVER include Australian companies or .au domains. Set country to each company's real country."
-            : "LOCATION RULE: return a mix, roughly half based in Australia and half overseas — event production companies, AV / sound and lighting hire firms, festival teams, and event agencies. Set country to each company's real country (\"Australia\" for the Australian ones).";
+            ? "STRICT LOCATION RULE: every company MUST be based OUTSIDE Australia. NEVER include Australian companies or .au domains. Set country to each company's real country."
+            : "LOCATION RULE: return a mix, roughly half based in Australia and half overseas. Set country to each company's real country (\"Australia\" for the Australian ones).";
+      const an = data.analysis;
       const res = await aiJson<{ companies: Target[] }>(
-        `You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Only include companies you are confident exist, with their real primary website domain. ${locationRule}`,
-        `Product: ${data.analysis.business_name} — ${data.analysis.one_liner}\nWhat it does: ${data.analysis.what_it_does}\nIdeal customers: ${data.analysis.ideal_customers.join("; ")}\nTarget industries: ${data.analysis.target_industries.join(", ")}\nPain points: ${data.analysis.pain_points.join("; ")}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
+        `You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Derive the target market ONLY from the product analysis given (its ideal customers, industries and buyer titles); do not assume any other vertical. Only include companies you are confident exist, with their real primary website domain. ${locationRule}`,
+        `Product: ${an.business_name}: ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nIdeal customers: ${an.ideal_customers.join("; ")}\nTarget industries: ${an.target_industries.join(", ")}\nBuyer titles: ${an.target_titles.join(", ")}\nPain points: ${an.pain_points.join("; ")}\nDifferentiators: ${an.differentiators.join("; ") || "(none)"}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
       );
       const candidates = (res.companies ?? [])
         .map((c) => ({ ...c, domain: hostOf(String(c.domain ?? "")) ?? "" }))
@@ -248,6 +220,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         analysis: analysisSchema,
         website: z.string().max(300),
         sender: z.object({ name: z.string().min(1).max(120), email: z.string().email().max(200) }),
+        approved_claims: z.string().max(1500).default(""),
       })
       .parse(d),
   )
@@ -266,7 +239,8 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const emails = [...new Set(uniq.flatMap((p) => extractEmails(p.html, domain)))].slice(0, 15);
       const corpus = uniq.map((p) => `URL: ${p.url}\n${htmlToText(p.html, 3000)}`).join("\n---\n").slice(0, 22000);
       const an = data.analysis;
-      const approvedAdoption = cadenceOpsAdoption(data.website);
+      const approved = data.approved_claims.trim();
+      const approvedLower = approved.toLowerCase();
       const caps = an.capability_status.map((c) => `${c.capability} [${c.status}]${c.evidence ? `: ${c.evidence}` : ""}`).join("\n- ") || "(none listed)";
       const nonLive = an.capability_status.filter((c) => c.status !== "live").map((c) => c.capability).filter((c) => c.length >= 4);
       const senderEvidence = [an.value_proposition, an.what_it_does, ...an.pricing_summary, ...an.differentiators, ...an.proof_points, ...an.capability_status.map((c) => `${c.capability} ${c.evidence}`)].join(" ").toLowerCase();
@@ -274,18 +248,18 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       type Draft = { contact_name: string | null; contact_title: string | null; email: string | null; source_url: string | null; evidence_map: (EvidenceItem & { selected?: boolean })[]; subject: string; body: string };
       const system =
         "You research B2B prospects and write short, specific, pain-first cold outreach emails. Use ONLY facts present in the provided page text, except any explicitly labelled operator-approved sender claims. Never invent people, email addresses, prices, offers, capabilities or problems. Never assume a problem merely because the industry commonly has it. Every inference must follow from an observed fact on their site.";
-      const adoptionInstruction = approvedAdoption
-        ? "\nOPERATOR-APPROVED CADENCEOPS CAMPAIGN CLAIMS (sender assertions, not target observations; approved even if absent from the sender site scan): The prospect does NOT need to replace, migrate or change existing workflows or tools to try CadenceOps. CadenceOps can run alongside the existing workflow in parallel. Getting started takes about five minutes. After the pain and live-capability discussion, BEFORE the CTA, include one concise, naturally varied practical objection-handling passage that clearly communicates all THREE points. Do not repeat a fixed template or present these as facts observed on the prospect's site. This is the ONLY exception to the verified-facts rule; it does not approve pricing, free offers, plans, credit-card, proof or additional capabilities.\n"
+      const adoptionInstruction = approved
+        ? `\nOPERATOR-APPROVED SENDER ASSERTIONS for ${hostOf(data.website)} only (approved by the sender personally; NOT target observations and NOT from the site scan):\n${approved}\nWeave the relevant ones in naturally after the pain and capability discussion, BEFORE the CTA, as practical objection-handling. Vary wording; do not paste them verbatim as a list. These are the ONLY exception to the verified-facts rule; they do not approve anything they don't explicitly say.\n`
         : "";
-      const prompt = `Target company: ${data.target.name} (${domain}), ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSENDER (commercial facts below are verified from the sender's own site, except explicitly labelled operator-approved campaign claims)\nSender: ${data.sender.name} <${data.sender.email}>\nProduct: ${an.business_name} (${data.website}): ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nDifferentiators / moat: ${an.differentiators.join("; ") || "(none stated)"}\nPricing (verified): ${an.pricing_summary.join("; ") || "(none found, so make NO pricing, free, trial, credit-card or plan claims)"}\nProof points (verified): ${an.proof_points.join("; ") || "(none found)"}\nCapabilities with status:\n- ${caps}\n${adoptionInstruction}\nTasks:\n1. Build evidence_map (3-6 items) BEFORE writing. Each item: observed_fact (literally on their pages), source_url (exact page URL above), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, else "INFERENCE" that follows directly from the observed_fact), consequence (practical cost in their terms), role_relevance, matched_sender_capability (only from the sender capabilities list, or "none"), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"), selected (true for the 2-3 items you will use in the email; 4 only if evidence is unusually strong). Rank for selection by: operational cost/frustration, recurrence, relevance to the chosen contact, evidence confidence, strength of sender match. Only select items whose matched capability is live. Skip anything you can't ground in the page text.\n2. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n3. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n4. source_url: page URL where the person or email appeared, or null.\n5. Write the email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approvedAdoption ? " Include the approved adoption reassurance after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free events/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approvedAdoption ? " EXCEPTION: only the three CadenceOps adoption assertions explicitly labelled operator-approved above may be included without public-site evidence." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform", or lists like "clients, crew, equipment, compliance and finance".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, subject, body.`;
+      const prompt = `Target company: ${data.target.name} (${domain}), ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSENDER (commercial facts below are verified from the sender's own site, except explicitly labelled operator-approved campaign claims)\nSender: ${data.sender.name} <${data.sender.email}>\nProduct: ${an.business_name} (${data.website}): ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nDifferentiators / moat: ${an.differentiators.join("; ") || "(none stated)"}\nPricing (verified): ${an.pricing_summary.join("; ") || "(none found, so make NO pricing, free, trial, credit-card or plan claims)"}\nProof points (verified): ${an.proof_points.join("; ") || "(none found)"}\nCapabilities with status:\n- ${caps}\n${adoptionInstruction}\nTasks:\n1. Build evidence_map (3-6 items) BEFORE writing. Each item: observed_fact (literally on their pages), source_url (exact page URL above), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, else "INFERENCE" that follows directly from the observed_fact), consequence (practical cost in their terms), role_relevance, matched_sender_capability (only from the sender capabilities list, or "none"), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"), selected (true for the 2-3 items you will use in the email; 4 only if evidence is unusually strong). Rank for selection by: operational cost/frustration, recurrence, relevance to the chosen contact, evidence confidence, strength of sender match. Only select items whose matched capability is live. Skip anything you can't ground in the page text.\n2. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n3. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n4. source_url: page URL where the person or email appeared, or null.\n5. Write the email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approved ? " Include the operator-approved sender assertions after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free offers/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approved ? " EXCEPTION: statements explicitly contained in the operator-approved sender assertions above may be used." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, subject, body.`;
 
       let r = await aiJson<Draft>(system, prompt, "medium");
       const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
       const offending = hasNonLive(String(r.body ?? ""));
       const namesThisTarget = (subject: string) => subject.toLowerCase().includes(data.target.name.toLowerCase());
-      if (offending.length || (approvedAdoption && !hasAdoptionReassurance(String(r.body ?? ""))) || !namesThisTarget(String(r.subject ?? ""))) {
+      if (offending.length || !namesThisTarget(String(r.subject ?? ""))) {
         // One corrective regeneration for non-live claims, missing reassurance or a mismatched subject.
-        r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approvedAdoption ? "Make sure the adoption reassurance clearly includes all three approved points after the pains and before the CTA. " : ""}The subject must name THIS target (${data.target.name}), not another company.`, "medium");
+        r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approved ? "Include the operator-approved sender assertions before the CTA. " : ""}The subject must name THIS target (${data.target.name}), not another company.`, "medium");
       }
 
       const pageUrls = new Set(uniq.map((p) => p.url));
@@ -327,9 +301,8 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       body = sentences(body, (x) => {
         if (/reply and i won't follow up/i.test(x)) return true;
         if (hasNonLive(x).length) return false;
-        return CLAIMS.every(([inText, inEvidence], index) => !inText.test(x) || inEvidence.test(senderEvidence) || (approvedAdoption && index === 4 && /\b(?:five|5)\s+minut/i.test(x) && !/\b(?:\d+|one|two|three|four|six|seven|eight|nine|ten)\s+minut/i.test(x.replace(/\b5\s+minut/gi, ""))));
+        return CLAIMS.every(([inText, inEvidence], index) => !inText.test(x) || inEvidence.test(senderEvidence) || inEvidence.test(approvedLower));
       });
-      if (approvedAdoption) body = ensureAdoptionReassurance(body, domain);
       const subject = noDash(namesThisTarget(String(r.subject ?? ""))
         ? String(r.subject)
         : `${data.target.name}: ${(evidence_map.find((e) => e.selected && e.capability_status === "live")?.matched_sender_capability || "operations").split(/\s+/).slice(0, 5).join(" ")}`);

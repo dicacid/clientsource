@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Check, Copy, ExternalLink, Loader2, Mail, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +46,20 @@ type Row = Target & {
 };
 
 const STORE = "pipeline.prospect.sender";
+const CLAIMS_STORE = "pipeline.prospect.claims";
+// Sender-specific campaign data (not engine logic): claims the operator approved for cadenceops.app.
+const DEFAULT_CLAIMS: Record<string, string> = {
+  "cadenceops.app":
+    "No need to replace, migrate away from, or change existing workflow or tools to try CadenceOps.\nCadenceOps can run alongside the existing workflow in parallel.\nGetting started takes about five minutes.",
+};
+const claimKey = (site: string) => normalizeWebsite(site)?.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] ?? "";
+function readClaims(): Record<string, string> {
+  try {
+    return { ...DEFAULT_CLAIMS, ...JSON.parse(localStorage.getItem(CLAIMS_STORE) ?? "{}") };
+  } catch {
+    return { ...DEFAULT_CLAIMS };
+  }
+}
 
 function ProspectPage() {
   const ws = useWorkspace();
@@ -62,6 +76,20 @@ function ProspectPage() {
   const [analysis, setAnalysis] = useState<{ website: string; analysis: Analysis } | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [claims, setClaims] = useState("");
+  const runId = useRef(0);
+  const domainKey = claimKey(website);
+
+  // Load only this sender domain's approved claims (or blank) whenever the domain changes.
+  useEffect(() => {
+    setClaims(domainKey ? (readClaims()[domainKey] ?? "") : "");
+  }, [domainKey]);
+
+  function changeClaims(v: string) {
+    setClaims(v);
+    if (!domainKey) return;
+    localStorage.setItem(CLAIMS_STORE, JSON.stringify({ ...readClaims(), [domainKey]: v }));
+  }
 
   useEffect(() => {
     try {
@@ -84,15 +112,17 @@ function ProspectPage() {
   const sender = { name: name.trim(), email: email.trim() };
 
   async function runResearch(targets: Target[], a: { website: string; analysis: Analysis }) {
+    const id = runId.current;
     setPhase("researching");
     const queue = [...targets.keys()];
     const worker = async () => {
       for (;;) {
         const i = queue.shift();
-        if (i === undefined) return;
+        if (i === undefined || id !== runId.current) return;
         setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "working" } : x)));
         try {
-          const result = await research({ data: { target: targets[i]!, analysis: a.analysis, website: a.website, sender } });
+          const result = await research({ data: { target: targets[i]!, analysis: a.analysis, website: a.website, sender, approved_claims: claims } });
+          if (id !== runId.current) return;
           setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "done", result } : x)));
         } catch (e) {
           setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "error", error: (e as Error).message } : x)));
@@ -101,7 +131,7 @@ function ProspectPage() {
       }
     };
     await Promise.all([worker(), worker(), worker()]);
-    setPhase("done");
+    if (id === runId.current) setPhase("done");
   }
 
   async function start(e: FormEvent) {
@@ -111,14 +141,18 @@ function ProspectPage() {
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
     if (!normalizeWebsite(website)) return setError("Enter your website, like cadenceops.app");
     localStorage.setItem(STORE, JSON.stringify({ ...sender, website, region }));
+    // Fresh run: drop any previous sender's analysis, prospects and drafts.
+    const id = ++runId.current;
     setRows([]);
     setAnalysis(null);
     try {
       setPhase("analyzing");
       const a = await analyze({ data: { website } });
+      if (id !== runId.current) return;
       setAnalysis(a);
       setPhase("discovering");
       const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region } });
+      if (id !== runId.current) return;
       if (!targets.length) {
         setPhase("done");
         return setError("No live matching companies found this round. Try “Find more”.");
@@ -127,7 +161,7 @@ function ProspectPage() {
       await runResearch(targets, a);
     } catch (err) {
       setError((err as Error).message);
-      setPhase(analysis ? "done" : "idle");
+      setPhase("idle");
     }
   }
 
@@ -155,7 +189,7 @@ function ProspectPage() {
           const t = targets[i - offset]!;
           setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "working" } : x)));
           try {
-            const result = await research({ data: { target: t, analysis: analysis.analysis, website: analysis.website, sender } });
+            const result = await research({ data: { target: t, analysis: analysis.analysis, website: analysis.website, sender, approved_claims: claims } });
             setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "done", result } : x)));
           } catch (e) {
             setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "error", error: (e as Error).message } : x)));
@@ -175,7 +209,7 @@ function ProspectPage() {
     const t = rows[i]!;
     setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "working", error: undefined } : x)));
     try {
-      const result = await research({ data: { target: t, analysis: analysis.analysis, website: analysis.website, sender } });
+      const result = await research({ data: { target: t, analysis: analysis.analysis, website: analysis.website, sender, approved_claims: claims } });
       setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "done", result } : x)));
     } catch (e) {
       setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "error", error: (e as Error).message } : x)));
@@ -278,7 +312,21 @@ function ProspectPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button type="submit" disabled={busy} className="gap-2">
+        <div className="space-y-1.5 sm:col-span-5">
+          <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
+          <Textarea
+            id="p-claims"
+            value={claims}
+            onChange={(e) => changeClaims(e.target.value)}
+            rows={3}
+            placeholder="One per line"
+            disabled={!domainKey}
+          />
+          <p className="text-xs text-muted-foreground">
+            Facts you personally approve for this sender, e.g. runs alongside existing tools; setup takes about five minutes. Saved for {domainKey || "this website"} only.
+          </p>
+        </div>
+        <Button type="submit" disabled={busy} className="gap-2 sm:col-start-5">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           Find prospects
         </Button>
