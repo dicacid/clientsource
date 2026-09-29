@@ -403,8 +403,9 @@ function PainMap({ items, pages }: { items: EvidenceItem[]; pages: number }) {
       ) : (
         <ul className="mt-2 space-y-2">
           {items.map((e, i) => (
-            <li key={i} className="border-l-2 border-primary/40 pl-3 text-sm">
+            <li key={i} className={`border-l-2 pl-3 text-sm ${e.selected ? "border-primary" : e.confidence === "high" ? "border-primary/40" : "border-border opacity-80"}`}>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                {e.selected && <span className="rounded bg-primary px-1.5 py-0.5 font-medium text-primary-foreground">Used in email</span>}
                 <span className={`rounded px-1.5 py-0.5 font-medium ${e.classification === "FACT" ? "bg-primary/15 text-primary" : "bg-accent text-foreground"}`}>
                   {e.classification}
                 </span>
