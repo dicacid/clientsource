@@ -282,9 +282,10 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       let r = await aiJson<Draft>(system, prompt, "medium");
       const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
       const offending = hasNonLive(String(r.body ?? ""));
-      if (offending.length || (approvedAdoption && !hasAdoptionReassurance(String(r.body ?? "")))) {
-        // One corrective regeneration for non-live claims or missing campaign reassurance.
-        r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approvedAdoption ? "Make sure the adoption reassurance clearly includes all three approved points after the pains and before the CTA." : ""}`, "medium");
+      const namesThisTarget = (subject: string) => subject.toLowerCase().includes(data.target.name.toLowerCase());
+      if (offending.length || (approvedAdoption && !hasAdoptionReassurance(String(r.body ?? ""))) || !namesThisTarget(String(r.subject ?? ""))) {
+        // One corrective regeneration for non-live claims, missing reassurance or a mismatched subject.
+        r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approvedAdoption ? "Make sure the adoption reassurance clearly includes all three approved points after the pains and before the CTA. " : ""}The subject must name THIS target (${data.target.name}), not another company.`, "medium");
       }
 
       const pageUrls = new Set(uniq.map((p) => p.url));
@@ -329,7 +330,9 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         return CLAIMS.every(([inText, inEvidence], index) => !inText.test(x) || inEvidence.test(senderEvidence) || (approvedAdoption && index === 4 && /\b(?:five|5)\s+minut/i.test(x) && !/\b(?:\d+|one|two|three|four|six|seven|eight|nine|ten)\s+minut/i.test(x.replace(/\b5\s+minut/gi, ""))));
       });
       if (approvedAdoption) body = ensureAdoptionReassurance(body, domain);
-      const subject = noDash(String(r.subject ?? ""));
+      const subject = noDash(namesThisTarget(String(r.subject ?? ""))
+        ? String(r.subject)
+        : `${data.target.name}: ${(evidence_map.find((e) => e.selected && e.capability_status === "live")?.matched_sender_capability || "operations").split(/\s+/).slice(0, 5).join(" ")}`);
       const lowerCorpus = corpus.toLowerCase();
       const email = r.email && emails.includes(r.email.toLowerCase()) ? r.email.toLowerCase() : emails.find((e) => e.endsWith(domain)) ?? null;
       const name = r.contact_name && lowerCorpus.includes(r.contact_name.toLowerCase().split(" ").pop() ?? "~~") ? r.contact_name.slice(0, 120) : null;
