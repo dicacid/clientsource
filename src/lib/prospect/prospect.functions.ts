@@ -77,28 +77,37 @@ function wrap<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
+// The AI sometimes returns objects instead of strings in lists; flatten them to text.
+const toText = (v: unknown): string =>
+  typeof v === "string" ? v : v && typeof v === "object" ? Object.values(v as Record<string, unknown>).map(toText).filter(Boolean).join(": ") : v == null ? "" : String(v);
+const strList = (itemMax: number, n: number) =>
+  z.preprocess(
+    (v) => (Array.isArray(v) ? v.map(toText).filter(Boolean).map((x) => x.slice(0, itemMax)).slice(0, n) : []),
+    z.array(z.string().max(itemMax)).max(n),
+  );
+
 const analysisSchema = z.object({
   business_name: z.string().max(200),
   one_liner: z.string().max(500),
   what_it_does: z.string().max(3000),
   value_proposition: z.string().max(2000),
-  ideal_customers: z.array(z.string().max(300)).max(12),
-  target_industries: z.array(z.string().max(120)).max(12),
-  target_titles: z.array(z.string().max(120)).max(12),
-  pain_points: z.array(z.string().max(300)).max(12),
-  differentiators: z.array(z.string().max(300)).max(10).default([]),
-  pricing_summary: z.array(z.string().max(300)).max(10).default([]),
+  ideal_customers: strList(300, 12),
+  target_industries: strList(120, 12),
+  target_titles: strList(120, 12),
+  pain_points: strList(300, 12),
+  differentiators: strList(300, 10),
+  pricing_summary: strList(300, 10),
   capability_status: z
     .array(
       z.object({
-        capability: z.string().max(200),
+        capability: z.preprocess((v) => toText(v).slice(0, 200), z.string()),
         status: z.enum(["live", "preview", "planned", "unclear"]).catch("unclear"),
-        evidence: z.string().max(400),
+        evidence: z.preprocess((v) => toText(v).slice(0, 400), z.string()),
       }),
     )
     .max(15)
     .default([]),
-  proof_points: z.array(z.string().max(300)).max(10).default([]),
+  proof_points: strList(300, 10),
 });
 
 const SENDER_KEYWORDS = ["pricing", "plans", "features", "product", "platform", "solutions", "capabilities", "integrations", "automation", "ai", "agents", "security", "faq", "docs", "about", "industries", "use-cases", "case-studies"];
