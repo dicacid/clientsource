@@ -14,3 +14,4 @@
 - Protected pages live under src/routes/_authenticated/_app/ (membership gate); onboarding sits outside _app — why: first-run flow needs a session but no membership.
 - Website normalization rule exists twice (SQL normalize_website + src/lib/website.ts) and must stay identical — why: CSV matching and CHECK constraint.
 - Prospect finder: AI + public-site reading run only in server functions (src/lib/prospect/*.server.ts), gated by workspace membership; emails must come from scraped pages — why: no invented contacts, keys stay server-side.
+- Outreach campaign assertions are scoped by exact sender hostname; only cadenceops.app may use operator-approved adoption claims without site evidence, while other claims and senders stay evidence-bound — why: avoid transferring seller-specific promises to unrelated products.
