@@ -54,7 +54,7 @@ export function ConfirmDelete({
   trigger: ReactNode;
   title: string;
   description: string;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => unknown;
 }) {
   return (
     <AlertDialog>
