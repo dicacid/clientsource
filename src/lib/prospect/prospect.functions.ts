@@ -112,7 +112,9 @@ export const discoverTargets = createServerFn({ method: "POST" })
       );
       const candidates = (res.companies ?? [])
         .map((c) => ({ ...c, domain: hostOf(String(c.domain ?? "")) ?? "" }))
-        .filter((c) => c.domain && c.name && !skip.has(c.domain));
+        .filter((c) => c.domain && c.name && !skip.has(c.domain))
+        // Australia-only: keep .au domains or an explicit Australian country/location.
+        .filter((c) => c.domain.endsWith(".au") || /australia|sydney|melbourne|brisbane|perth|adelaide|gold coast|canberra|hobart|darwin/i.test(String(c.country ?? "")));
       // Verify each domain is a live public website.
       const checked = await Promise.all(
         candidates.slice(0, 16).map(async (c) => ((await fetchPage(`https://${c.domain}`, 6000)) ? c : null)),
