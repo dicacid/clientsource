@@ -94,6 +94,7 @@ export const discoverTargets = createServerFn({ method: "POST" })
         website: z.string().max(300),
         analysis: analysisSchema,
         exclude: z.array(z.string().max(200)).max(200).default([]),
+        region: z.enum(["domestic", "international", "both"]).default("domestic"),
       })
       .parse(d),
   )
@@ -106,13 +107,23 @@ export const discoverTargets = createServerFn({ method: "POST" })
         ...data.exclude.map((d) => hostOf(d) ?? d),
         ...((existing ?? []) as { website: string }[]).map((c) => hostOf(c.website) ?? ""),
       ]);
+      const AU_RE = /australia|sydney|melbourne|brisbane|perth|adelaide|gold coast|canberra|hobart|darwin/i;
+      const isAu = (c: { domain: string; country?: string }) => c.domain.endsWith(".au") || AU_RE.test(String(c.country ?? ""));
+      const locationRule =
+        data.region === "domestic"
+          ? "STRICT LOCATION RULE: every company MUST be based in Australia — Australian event production companies, AV / sound and lighting hire firms, festival teams, and event agencies. Prefer .com.au domains or companies clearly located in Australian cities (Sydney, Melbourne, Brisbane, Perth, Adelaide, Gold Coast, etc.). NEVER include overseas companies. Set country to \"Australia\" for every item."
+          : data.region === "international"
+            ? "STRICT LOCATION RULE: every company MUST be based OUTSIDE Australia — event production companies, AV / sound and lighting hire firms, festival teams, and event agencies in other countries (e.g. UK, USA, Europe, New Zealand, Asia). NEVER include Australian companies or .au domains. Set country to each company's real country."
+            : "LOCATION RULE: return a mix, roughly half based in Australia and half overseas — event production companies, AV / sound and lighting hire firms, festival teams, and event agencies. Set country to each company's real country (\"Australia\" for the Australian ones).";
       const res = await aiJson<{ companies: Target[] }>(
-        "You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Only include companies you are confident exist, with their real primary website domain. Prefer a mix of countries in the product's likely market.",
+        `You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Only include companies you are confident exist, with their real primary website domain. ${locationRule}`,
         `Product: ${data.analysis.business_name} — ${data.analysis.one_liner}\nWhat it does: ${data.analysis.what_it_does}\nIdeal customers: ${data.analysis.ideal_customers.join("; ")}\nTarget industries: ${data.analysis.target_industries.join(", ")}\nPain points: ${data.analysis.pain_points.join("; ")}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
       );
       const candidates = (res.companies ?? [])
         .map((c) => ({ ...c, domain: hostOf(String(c.domain ?? "")) ?? "" }))
-        .filter((c) => c.domain && c.name && !skip.has(c.domain));
+        .filter((c) => c.domain && c.name && !skip.has(c.domain))
+        // Enforce the region choice even if the AI slips.
+        .filter((c) => (data.region === "domestic" ? isAu(c) : data.region === "international" ? !isAu(c) : true));
       // Verify each domain is a live public website.
       const checked = await Promise.all(
         candidates.slice(0, 16).map(async (c) => ((await fetchPage(`https://${c.domain}`, 6000)) ? c : null)),

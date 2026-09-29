@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/crm/shared";
 import { useWorkspace } from "@/lib/workspace";
 import { EMAIL_RE } from "@/lib/constants";
@@ -55,6 +56,7 @@ function ProspectPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(ws.email);
   const [website, setWebsite] = useState("");
+  const [region, setRegion] = useState<"domestic" | "international" | "both">("domestic");
   const [phase, setPhase] = useState<"idle" | "analyzing" | "discovering" | "researching" | "done">("idle");
   const [analysis, setAnalysis] = useState<{ website: string; analysis: Analysis } | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -66,6 +68,7 @@ function ProspectPage() {
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       if (s.website) setWebsite(s.website);
+      if (s.region === "domestic" || s.region === "international" || s.region === "both") setRegion(s.region);
     } catch {
       /* ignore */
     }
@@ -106,7 +109,7 @@ function ProspectPage() {
     if (!sender.name) return setError("Enter your name.");
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
     if (!normalizeWebsite(website)) return setError("Enter your website, like cadenceops.app");
-    localStorage.setItem(STORE, JSON.stringify({ ...sender, website }));
+    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, region }));
     setRows([]);
     setAnalysis(null);
     try {
@@ -114,7 +117,7 @@ function ProspectPage() {
       const a = await analyze({ data: { website } });
       setAnalysis(a);
       setPhase("discovering");
-      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [] } });
+      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region } });
       if (!targets.length) {
         setPhase("done");
         return setError("No live matching companies found this round. Try “Find more”.");
@@ -133,7 +136,7 @@ function ProspectPage() {
     setPhase("discovering");
     try {
       const { targets } = await discover({
-        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain) },
+        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain), region },
       });
       if (!targets.length) {
         setPhase("done");
@@ -248,7 +251,7 @@ function ProspectPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Prospect finder" sub="Your website in → matching companies, their decision-maker, and a ready-to-send email out." />
 
-      <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+      <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_160px_auto] sm:items-end">
         <div className="space-y-1.5">
           <Label htmlFor="p-name">Your name</Label>
           <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
@@ -260,6 +263,19 @@ function ProspectPage() {
         <div className="space-y-1.5">
           <Label htmlFor="p-site">Your business website</Label>
           <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="cadenceops.app" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-region">Target region</Label>
+          <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
+            <SelectTrigger id="p-region">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="domestic">Domestic (Australia)</SelectItem>
+              <SelectItem value="international">International</SelectItem>
+              <SelectItem value="both">Both</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <Button type="submit" disabled={busy} className="gap-2">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
