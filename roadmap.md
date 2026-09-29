@@ -4,3 +4,5 @@
 
 - [x] Prospect targeting option: Domestic (Australia) / International / Both on the prospect form, enforced in discovery prompt + post-filter
 - [x] CadenceOps-only adoption reassurance in outreach, with typecheck, production build and fresh live Australian draft verification
+
+- [x] Sender-agnostic prospect engine (generic discovery, per-domain approved claims, run reset)
