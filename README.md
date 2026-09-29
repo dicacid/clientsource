@@ -107,7 +107,15 @@ src/routes/_authenticated/_app/members.tsx
 src/routes/_authenticated/_app/import.tsx
 ```
 
+## Prospect finder (added later, owner-approved exception)
+
+`/prospect`: enter your name, email and website. The server reads your public site, AI summarizes the offer and ideal
+customers, AI proposes matching companies (each domain is checked to be a live website), then each company's public
+home/contact/about/team pages are read to pick a named decision-maker and an email **that actually appears on the site**
+(never guessed). AI writes a personalized draft. You edit it, then "Open in email app" (mailto) or "Copy". "Save to CRM"
+creates the company, contact and a note. Uses the Lovable AI Gateway server-side; no email is sent by the app.
+
 ## Not in this build
 
-Email sending, enrichment, scraping, third-party APIs, Edge Functions, and invite emails.
-If email is ever added, consent and unsubscribe come first. There is no send button.
+Email sending from the app, paid enrichment databases, Edge Functions, and invite emails.
+If sending is ever added, consent and unsubscribe come first.
