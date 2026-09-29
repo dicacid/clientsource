@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/crm/shared";
 import { useWorkspace } from "@/lib/workspace";
 import { EMAIL_RE } from "@/lib/constants";
@@ -55,6 +56,7 @@ function ProspectPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(ws.email);
   const [website, setWebsite] = useState("");
+  const [region, setRegion] = useState<"domestic" | "international" | "both">("domestic");
   const [phase, setPhase] = useState<"idle" | "analyzing" | "discovering" | "researching" | "done">("idle");
   const [analysis, setAnalysis] = useState<{ website: string; analysis: Analysis } | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
