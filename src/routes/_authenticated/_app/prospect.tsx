@@ -22,6 +22,7 @@ import {
   researchAndDraft,
   type Analysis,
   type ContactResult,
+  type EvidenceItem,
   type Target,
 } from "@/lib/prospect/prospect.functions";
 
@@ -308,6 +309,23 @@ function ProspectPage() {
             <Chips title="Industries" items={analysis.analysis.target_industries} />
             <Chips title="Decision-makers" items={analysis.analysis.target_titles} />
           </div>
+          {(analysis.analysis.capability_status?.length ?? 0) > 0 && (
+            <div className="mt-4">
+              <div className="mb-1.5 text-xs text-muted-foreground">Capabilities (from site)</div>
+              <div className="flex flex-wrap gap-1">
+                {analysis.analysis.capability_status.map((c) => (
+                  <span key={c.capability} title={c.evidence} className="rounded bg-muted px-2 py-0.5 text-xs">
+                    {c.capability} <span className="text-muted-foreground">· {c.status}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
+            {(analysis.analysis.pricing_summary?.length ?? 0) > 0 && <Chips title="Pricing" items={analysis.analysis.pricing_summary} />}
+            {(analysis.analysis.differentiators?.length ?? 0) > 0 && <Chips title="Differentiators" items={analysis.analysis.differentiators} />}
+            {(analysis.analysis.proof_points?.length ?? 0) > 0 && <Chips title="Proof points" items={analysis.analysis.proof_points} />}
+          </div>
         </section>
       )}
 
@@ -371,6 +389,47 @@ function Chips({ title, items }: { title: string; items: string[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function PainMap({ items, pages }: { items: EvidenceItem[]; pages: number }) {
+  return (
+    <details className="rounded-md border bg-background/40 p-3" open>
+      <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Why this company / Pain map <span className="normal-case tracking-normal">· {items.length} signals from {pages} pages</span>
+      </summary>
+      {items.length === 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">No grounded evidence found on their public pages — treat this draft with care.</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {items.map((e, i) => (
+            <li key={i} className="border-l-2 border-primary/40 pl-3 text-sm">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className={`rounded px-1.5 py-0.5 font-medium ${e.classification === "FACT" ? "bg-primary/15 text-primary" : "bg-accent text-foreground"}`}>
+                  {e.classification}
+                </span>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{e.confidence} confidence</span>
+                <a href={e.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary">
+                  {e.source_url.replace(/^https?:\/\//, "")} <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <p className="mt-1">{e.observed_fact}</p>
+              <p className="text-xs text-muted-foreground">
+                → {e.likely_operational_friction}
+                {e.consequence && ` — ${e.consequence}`}
+              </p>
+              {e.matched_sender_capability && e.matched_sender_capability.toLowerCase() !== "none" && (
+                <p className="text-xs">
+                  Matches: <span className="font-medium">{e.matched_sender_capability}</span>{" "}
+                  <span className="text-muted-foreground">({e.capability_status})</span>
+                  {e.role_relevance && <span className="text-muted-foreground"> · {e.role_relevance}</span>}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 
@@ -461,6 +520,7 @@ function ProspectCard({
               )}
             </div>
           </div>
+          <PainMap items={res.evidence_map ?? []} pages={res.pages_read?.length ?? 0} />
           <Input value={res.subject} onChange={(e) => onChange({ subject: e.target.value })} aria-label="Subject" className="font-medium" />
           <Textarea value={res.body} onChange={(e) => onChange({ body: e.target.value })} rows={9} aria-label="Email body" className="text-sm" />
           <div className="flex flex-wrap gap-2">
