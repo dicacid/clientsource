@@ -290,7 +290,6 @@ export type Database = {
       is_org_member: { Args: { org_id: string }; Returns: boolean }
       is_org_owner: { Args: { org_id: string }; Returns: boolean }
       normalize_website: { Args: { raw: string }; Returns: string }
-      seed_sample_data: { Args: never; Returns: undefined }
       set_member_role: {
         Args: { new_role: string; target_user_id: string }
         Returns: undefined
