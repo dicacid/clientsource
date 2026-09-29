@@ -183,7 +183,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const lowerCorpus = corpus.toLowerCase();
       const email = r.email && emails.includes(r.email.toLowerCase()) ? r.email.toLowerCase() : emails.find((e) => e.endsWith(domain)) ?? null;
       const name = r.contact_name && lowerCorpus.includes(r.contact_name.toLowerCase().split(" ").pop() ?? "~~") ? r.contact_name.slice(0, 120) : null;
-      const generic = email ? /^(info|hello|contact|sales|support|team|office|admin|enquiries|inquiries|mail|hi)@/.test(email) : false;
+      const generic = email ? /^(info|hello|contact|contactus|sales|support|team|office|admin|enquiries|enquiry|inquiries|inquiry|mail|hi|rental|rentals|hire|hiredesk|bookings|booking|events|general|reception|marketing|installation|integration|service|press|careers|jobs)@/.test(email) : false;
       return {
         contact_name: name,
         contact_title: name ? (r.contact_title?.slice(0, 120) ?? null) : null,
