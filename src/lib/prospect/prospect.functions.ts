@@ -87,17 +87,17 @@ const strList = (itemMax: number, n: number) =>
   );
 
 const analysisSchema = z.object({
-  business_name: z.string().max(200),
-  one_liner: z.string().max(500),
-  what_it_does: z.string().max(3000),
-  value_proposition: z.string().max(2000),
+  business_name: z.preprocess((v) => toText(v).slice(0, 200), z.string()),
+  one_liner: z.preprocess((v) => toText(v).slice(0, 500), z.string()),
+  what_it_does: z.preprocess((v) => toText(v).slice(0, 3000), z.string()),
+  value_proposition: z.preprocess((v) => toText(v).slice(0, 2000), z.string()),
   ideal_customers: strList(300, 12),
   target_industries: strList(120, 12),
   target_titles: strList(120, 12),
   pain_points: strList(300, 12),
   differentiators: strList(300, 10),
   pricing_summary: strList(300, 10),
-  capability_status: z
+  capability_status: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 15) : []), z
     .array(
       z.object({
         capability: z.preprocess((v) => toText(v).slice(0, 200), z.string()),
@@ -105,8 +105,7 @@ const analysisSchema = z.object({
         evidence: z.preprocess((v) => toText(v).slice(0, 400), z.string()),
       }),
     )
-    .max(15)
-    .default([]),
+    .max(15)),
   proof_points: strList(300, 10),
 });
 
