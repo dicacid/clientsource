@@ -283,7 +283,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
       const offending = hasNonLive(String(r.body ?? ""));
       if (offending.length || (approvedAdoption && !hasAdoptionReassurance(String(r.body ?? "")))) {
-        // One corrective regeneration when non-live capabilities are named in the body.
+        // One corrective regeneration for non-live claims or missing campaign reassurance.
         r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approvedAdoption ? "Make sure the adoption reassurance clearly includes all three approved points after the pains and before the CTA." : ""}`, "medium");
       }
 
@@ -326,7 +326,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       body = sentences(body, (x) => {
         if (/reply and i won't follow up/i.test(x)) return true;
         if (hasNonLive(x).length) return false;
-        return CLAIMS.every(([inText, inEvidence]) => !inText.test(x) || inEvidence.test(senderEvidence) || (approvedAdoption && inText === CLAIMS[4]?.[0] && /\b(?:five|5)\s+minut/i.test(x) && !/\b(?:\d+|one|two|three|four|six|seven|eight|nine|ten)\s+minut/i.test(x.replace(/\b5\s+minut/gi, ""))));
+        return CLAIMS.every(([inText, inEvidence], index) => !inText.test(x) || inEvidence.test(senderEvidence) || (approvedAdoption && index === 4 && /\b(?:five|5)\s+minut/i.test(x) && !/\b(?:\d+|one|two|three|four|six|seven|eight|nine|ten)\s+minut/i.test(x.replace(/\b5\s+minut/gi, ""))));
       });
       if (approvedAdoption) body = ensureAdoptionReassurance(body, domain);
       const subject = noDash(String(r.subject ?? ""));
