@@ -8,3 +8,8 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Architecture rules
+- Single-org CRM: all tenancy enforced in Postgres (one_org_only index, RLS helpers, RPCs); client never inserts orgs/members — why: security must not rely on UI.
+- Protected pages live under src/routes/_authenticated/_app/ (membership gate); onboarding sits outside _app — why: first-run flow needs a session but no membership.
+- Website normalization rule exists twice (SQL normalize_website + src/lib/website.ts) and must stay identical — why: CSV matching and CHECK constraint.

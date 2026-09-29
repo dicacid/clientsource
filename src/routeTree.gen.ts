@@ -17,6 +17,8 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppCompaniesRouteImport } from './routes/_authenticated/_app/companies'
 import { Route as AuthenticatedAppContactsRouteImport } from './routes/_authenticated/_app/contacts'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app/dashboard'
+import { Route as AuthenticatedAppImportRouteImport } from './routes/_authenticated/_app/import'
+import { Route as AuthenticatedAppMembersRouteImport } from './routes/_authenticated/_app/members'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -59,6 +61,16 @@ const AuthenticatedAppDashboardRoute =
     path: '/dashboard',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppImportRoute = AuthenticatedAppImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppMembersRoute = AuthenticatedAppMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -67,6 +79,8 @@ export interface FileRoutesByFullPath {
   '/companies': typeof AuthenticatedAppCompaniesRoute
   '/contacts': typeof AuthenticatedAppContactsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/import': typeof AuthenticatedAppImportRoute
+  '/members': typeof AuthenticatedAppMembersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -75,6 +89,8 @@ export interface FileRoutesByTo {
   '/companies': typeof AuthenticatedAppCompaniesRoute
   '/contacts': typeof AuthenticatedAppContactsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/import': typeof AuthenticatedAppImportRoute
+  '/members': typeof AuthenticatedAppMembersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,13 +102,30 @@ export interface FileRoutesById {
   '/_authenticated/_app/companies': typeof AuthenticatedAppCompaniesRoute
   '/_authenticated/_app/contacts': typeof AuthenticatedAppContactsRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/_authenticated/_app/import': typeof AuthenticatedAppImportRoute
+  '/_authenticated/_app/members': typeof AuthenticatedAppMembersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/onboarding' | '/companies' | '/contacts' | '/dashboard'
+    | '/'
+    | '/auth'
+    | '/onboarding'
+    | '/companies'
+    | '/contacts'
+    | '/dashboard'
+    | '/import'
+    | '/members'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/onboarding' | '/companies' | '/contacts' | '/dashboard'
+  to:
+    | '/'
+    | '/auth'
+    | '/onboarding'
+    | '/companies'
+    | '/contacts'
+    | '/dashboard'
+    | '/import'
+    | '/members'
   id:
     | '__root__'
     | '/'
@@ -103,6 +136,8 @@ export interface FileRouteTypes {
     | '/_authenticated/_app/companies'
     | '/_authenticated/_app/contacts'
     | '/_authenticated/_app/dashboard'
+    | '/_authenticated/_app/import'
+    | '/_authenticated/_app/members'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -169,6 +204,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppDashboardRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/import': {
+      id: '/_authenticated/_app/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof AuthenticatedAppImportRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/members': {
+      id: '/_authenticated/_app/members'
+      path: '/members'
+      fullPath: '/members'
+      preLoaderRoute: typeof AuthenticatedAppMembersRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
@@ -176,12 +225,16 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppCompaniesRoute: typeof AuthenticatedAppCompaniesRoute
   AuthenticatedAppContactsRoute: typeof AuthenticatedAppContactsRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
+  AuthenticatedAppImportRoute: typeof AuthenticatedAppImportRoute
+  AuthenticatedAppMembersRoute: typeof AuthenticatedAppMembersRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppCompaniesRoute: AuthenticatedAppCompaniesRoute,
   AuthenticatedAppContactsRoute: AuthenticatedAppContactsRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
+  AuthenticatedAppImportRoute: AuthenticatedAppImportRoute,
+  AuthenticatedAppMembersRoute: AuthenticatedAppMembersRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
