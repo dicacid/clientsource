@@ -68,6 +68,7 @@ function ProspectPage() {
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       if (s.website) setWebsite(s.website);
+      if (s.region === "domestic" || s.region === "international" || s.region === "both") setRegion(s.region);
     } catch {
       /* ignore */
     }
@@ -108,7 +109,7 @@ function ProspectPage() {
     if (!sender.name) return setError("Enter your name.");
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
     if (!normalizeWebsite(website)) return setError("Enter your website, like cadenceops.app");
-    localStorage.setItem(STORE, JSON.stringify({ ...sender, website }));
+    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, region }));
     setRows([]);
     setAnalysis(null);
     try {
@@ -116,7 +117,7 @@ function ProspectPage() {
       const a = await analyze({ data: { website } });
       setAnalysis(a);
       setPhase("discovering");
-      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [] } });
+      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region } });
       if (!targets.length) {
         setPhase("done");
         return setError("No live matching companies found this round. Try “Find more”.");
@@ -135,7 +136,7 @@ function ProspectPage() {
     setPhase("discovering");
     try {
       const { targets } = await discover({
-        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain) },
+        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain), region },
       });
       if (!targets.length) {
         setPhase("done");
@@ -250,7 +251,7 @@ function ProspectPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Prospect finder" sub="Your website in → matching companies, their decision-maker, and a ready-to-send email out." />
 
-      <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+      <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_160px_auto] sm:items-end">
         <div className="space-y-1.5">
           <Label htmlFor="p-name">Your name</Label>
           <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
