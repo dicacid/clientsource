@@ -298,6 +298,7 @@ export type Database = {
       shares_org: { Args: { profile_id: string }; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      workspace_exists: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
