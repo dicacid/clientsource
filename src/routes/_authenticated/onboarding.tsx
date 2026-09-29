@@ -37,7 +37,7 @@ function Onboarding() {
   useEffect(() => {
     resolveMembership()
       .then((r) => {
-        if (r.state === "member") navigate({ to: "/dashboard", replace: true });
+        if (r.state === "member") navigate({ to: "/prospect", replace: true });
         else setState(r.state);
       })
       .catch((e) => {
@@ -55,7 +55,7 @@ function Onboarding() {
     if (error) return toast.error(friendlyError(error));
     toast.success("Workspace created");
     await router.invalidate();
-    navigate({ to: "/dashboard", replace: true });
+    navigate({ to: "/prospect", replace: true });
   }
 
   async function out() {

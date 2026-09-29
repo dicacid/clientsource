@@ -88,7 +88,7 @@ view and prefixes cells starting with `= + - @` with `'`.
 ## File tree
 
 ```text
-supabase/migrations/          all schema, RLS, helpers, RPCs, seed function
+supabase/migrations/          all schema, RLS, helpers, RPCs (sample-data seeding removed)
 src/lib/website.ts            shared website normalizer
 src/lib/csv.ts                parse / export / formula escaping
 src/lib/session.ts            claim_invite + membership resolution, sign-out

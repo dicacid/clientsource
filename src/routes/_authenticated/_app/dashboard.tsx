@@ -57,14 +57,6 @@ function Dashboard() {
     },
   });
 
-  async function seed() {
-    const { error } = await supabase.rpc("seed_sample_data");
-    if (error) return toast.error(friendlyError(error));
-    toast.success("Sample data loaded");
-    qc.invalidateQueries();
-  }
-
-  const canSeed = ws.role === "owner" || ws.role === "admin";
   const max = Math.max(1, ...(q.data?.funnel.map((f) => f.count) ?? [1]));
 
   return (
@@ -73,11 +65,9 @@ function Dashboard() {
         title="Dashboard"
         sub={`Today is ${today} (your local date)`}
         actions={
-          canSeed && q.data && q.data.companies === 0 ? (
-            <Button variant="outline" onClick={seed}>
-              Load sample data
-            </Button>
-          ) : null
+          <Button asChild>
+            <Link to="/prospect">Find prospects</Link>
+          </Button>
         }
       />
       {q.isLoading ? (
@@ -90,15 +80,11 @@ function Dashboard() {
         <p className="text-destructive">{friendlyError(q.error)}</p>
       ) : q.data!.companies === 0 ? (
         <EmptyState
-          title="No companies yet."
+          title="No prospects yet. Enter your name, email and website in the Prospect finder, then save the companies you want to pursue."
           action={
-            canSeed ? (
-              <Button onClick={seed}>Load sample data</Button>
-            ) : (
-              <Button asChild>
-                <Link to="/companies">Add a company</Link>
-              </Button>
-            )
+            <Button asChild>
+              <Link to="/prospect">Open Prospect finder</Link>
+            </Button>
           }
         />
       ) : (
