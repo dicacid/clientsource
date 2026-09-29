@@ -14,6 +14,8 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedAppCompaniesRouteImport } from './routes/_authenticated/_app/companies'
+import { Route as AuthenticatedAppContactsRouteImport } from './routes/_authenticated/_app/contacts'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app/dashboard'
 
 const IndexRoute = IndexRouteImport.update({
@@ -39,6 +41,18 @@ const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppCompaniesRoute =
+  AuthenticatedAppCompaniesRouteImport.update({
+    id: '/companies',
+    path: '/companies',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppContactsRoute =
+  AuthenticatedAppContactsRouteImport.update({
+    id: '/contacts',
+    path: '/contacts',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppDashboardRoute =
   AuthenticatedAppDashboardRouteImport.update({
     id: '/dashboard',
@@ -50,12 +64,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/companies': typeof AuthenticatedAppCompaniesRoute
+  '/contacts': typeof AuthenticatedAppContactsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/companies': typeof AuthenticatedAppCompaniesRoute
+  '/contacts': typeof AuthenticatedAppContactsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
 }
 export interface FileRoutesById {
@@ -65,13 +83,16 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/_app/companies': typeof AuthenticatedAppCompaniesRoute
+  '/_authenticated/_app/contacts': typeof AuthenticatedAppContactsRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/onboarding' | '/dashboard'
+  fullPaths:
+    '/' | '/auth' | '/onboarding' | '/companies' | '/contacts' | '/dashboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/onboarding' | '/dashboard'
+  to: '/' | '/auth' | '/onboarding' | '/companies' | '/contacts' | '/dashboard'
   id:
     | '__root__'
     | '/'
@@ -79,6 +100,8 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/_app'
     | '/_authenticated/onboarding'
+    | '/_authenticated/_app/companies'
+    | '/_authenticated/_app/contacts'
     | '/_authenticated/_app/dashboard'
   fileRoutesById: FileRoutesById
 }
@@ -125,6 +148,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/_app/companies': {
+      id: '/_authenticated/_app/companies'
+      path: '/companies'
+      fullPath: '/companies'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/contacts': {
+      id: '/_authenticated/_app/contacts'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof AuthenticatedAppContactsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/dashboard': {
       id: '/_authenticated/_app/dashboard'
       path: '/dashboard'
@@ -136,10 +173,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppCompaniesRoute: typeof AuthenticatedAppCompaniesRoute
+  AuthenticatedAppContactsRoute: typeof AuthenticatedAppContactsRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppCompaniesRoute: AuthenticatedAppCompaniesRoute,
+  AuthenticatedAppContactsRoute: AuthenticatedAppContactsRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
 }
 
