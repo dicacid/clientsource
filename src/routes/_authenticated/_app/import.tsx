@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
-import { researchSpaCompany } from "@/lib/spa/research.functions";
+import { researchSpaVentureStaged } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/import")({
   head: () => ({ meta: [{ title: "Ventures & Innovation — SPA Intelligence" }] }),
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated/_app/import")({
 });
 
 function Ventures() {
-  const research = useServerFn(researchSpaCompany);
+  const research = useServerFn(researchSpaVentureStaged);
   const [query, setQuery] = useState("https://elmofo.com.au/");
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +22,7 @@ function Ventures() {
 
   async function run(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError(null); setResult(null);
-    try { setResult(await research({ data: { query, mode: "venture", businessContext: "elmofo", capabilityOverrides: "" } })); }
+    try { setResult(await research({ data: { query, businessContext: "elmofo" } })); }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
   }
