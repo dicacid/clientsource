@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
 import { SPA_CAPABILITIES } from "@/lib/spa/capabilities";
 import { researchSpaCompany } from "@/lib/spa/research.functions";
-import { addApprovalItem } from "@/lib/spa/store.functions";
+import { addApprovalItem, getSpaCapabilityProfile } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/prospect")({
   head: () => ({
@@ -27,6 +27,7 @@ function capabilitySeed() {
 function ProspectPage() {
   const research = useServerFn(researchSpaCompany);
   const createApproval = useServerFn(addApprovalItem);
+  const getSavedCapabilities = useServerFn(getSpaCapabilityProfile);
   const [query, setQuery] = useState("");
   const [businessContext, setBusinessContext] = useState<"spa" | "solaronline" | "elmofo">("spa");
   const [capabilities, setCapabilities] = useState(capabilitySeed);
@@ -42,6 +43,9 @@ function ProspectPage() {
       setQuery(prefill);
       localStorage.removeItem("spa-intelligence.prospect.prefill");
     }
+    void getSavedCapabilities()
+      .then((saved) => { if (saved) setCapabilities(saved); })
+      .catch(() => undefined);
   }, []);
 
   const capabilityCounts = useMemo(() => ({
