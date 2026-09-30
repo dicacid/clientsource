@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireRenderMember } from "@/integrations/render/auth-middleware";
 import { prospectFeedbackForOrganization } from "@/integrations/render/state.server";
-import { aiJson, AiError } from "./ai.server";
+import { aiJsonForOrg, AiError } from "./ai.server";
 import { extractEmails, extractLinks, fetchPage, fetchText, hostOf, htmlToText, pageMeta, rankedLinks } from "./web.server";
 
 export type Analysis = {
@@ -151,7 +151,7 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
       ]
         .join("\n---\n")
         .slice(0, 26000);
-      const a = await aiJson<Analysis>(
+      const a = await aiJsonForOrg<Analysis>(context.organizationId,
         "You are a B2B go-to-market analyst. Read a company's website text and explain precisely what the business sells, to whom, and who would benefit most. Use ONLY facts present in the text. Never invent features, prices, customers, metrics, testimonials or product status. If something isn't stated, leave it out (empty array) or mark status 'unclear'.",
         `Website: https://${host}\nTitle: ${meta.title}\nMeta description: ${meta.description}\n\nPages:\n${text}\n\nReturn JSON with keys: business_name, one_liner (max 25 words), what_it_does (2-4 sentences), value_proposition (1-2 sentences), ideal_customers (4-6 concrete customer profiles), target_industries (4-8), target_titles (3-6 decision-maker job titles who would buy), pain_points (3-5 problems it solves), differentiators (what the site says sets it apart; [] if none stated), pricing_summary (exact plans/prices/free tiers as stated; [] if no pricing on the site), capability_status (array of {capability, status: "live"|"preview"|"planned"|"unclear", evidence: short quote or paraphrase + page URL}; "live" = described as a current feature or included in a listed paid/free plan, "preview" = explicitly beta/early access, "planned" = explicitly coming soon/roadmap, "unclear" only when the site gives no indication either way; a generic legal/FAQ disclaimer does not make every feature unclear), proof_points (customer names, testimonials, metrics, awards explicitly on the site; [] if none).`,
         "medium",
@@ -191,7 +191,7 @@ export const discoverTargets = createServerFn({ method: "POST" })
             ? "STRICT LOCATION RULE: every company MUST be based OUTSIDE Australia. NEVER include Australian companies or .au domains. Set country to each company's real country."
             : "LOCATION RULE: return a mix, roughly half based in Australia and half overseas. Set country to each company's real country (\"Australia\" for the Australian ones).";
       const an = data.analysis;
-      const res = await aiJson<{ companies: Target[] }>(
+      const res = await aiJsonForOrg<{ companies: Target[] }>(context.organizationId,
         `You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Derive the target market ONLY from the product analysis given (its ideal customers, industries and buyer titles); do not assume any other vertical. Only include companies you are confident exist, with their real primary website domain. ${locationRule}`,
         `Product: ${an.business_name}: ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nIdeal customers: ${an.ideal_customers.join("; ")}\nTarget industries: ${an.target_industries.join(", ")}\nBuyer titles: ${an.target_titles.join(", ")}\nPain points: ${an.pain_points.join("; ")}\nDifferentiators: ${an.differentiators.join("; ") || "(none)"}${feedbackHint}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
       );
@@ -274,13 +274,13 @@ export const researchAndDraft = createServerFn({ method: "POST" })
 3. Write qualification_summary in 1-2 sentences explaining why this prospect merits attention, grounded only in the evidence map and trigger signals. Do not include a numeric score.
 4. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n5. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n6. source_url: page URL where the person or email appeared, or null.\n7. Write the initial email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approved ? " Include the operator-approved sender assertions after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free offers/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approved ? " EXCEPTION: statements explicitly contained in the operator-approved sender assertions above may be used." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n8. Create outreach_sequence with exactly two optional follow-up drafts for human review: step 2 at delay_days 3 and step 3 at delay_days 7. Each must use a different grounded evidence item or trigger from this dossier, add no new factual claims, avoid "just following up", stay under 120 words, and use only a reply or ${data.website} as the CTA. Fields: step, delay_days, angle, subject, body.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, trigger_signals, qualification_summary, outreach_sequence, subject, body.`;
 
-      let r = await aiJson<Draft>(system, prompt, "medium");
+      let r = await aiJsonForOrg<Draft>(context.organizationId,system, prompt, "medium");
       const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
       const offending = hasNonLive(String(r.body ?? ""));
       const namesThisTarget = (subject: string) => subject.toLowerCase().includes(data.target.name.toLowerCase());
       if (offending.length || !namesThisTarget(String(r.subject ?? ""))) {
         // One corrective regeneration for non-live claims, missing reassurance or a mismatched subject.
-        r = await aiJson<Draft>(system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approved ? "Include the operator-approved sender assertions before the CTA. " : ""}The subject must name THIS target (${data.target.name}), not another company.`, "medium");
+        r = await aiJsonForOrg<Draft>(context.organizationId,system, `${prompt}\n\nCORRECTION: ${offending.length ? `Do not mention these non-live capabilities: ${offending.join(", ")}. ` : ""}${approved ? "Include the operator-approved sender assertions before the CTA. " : ""}The subject must name THIS target (${data.target.name}), not another company.`, "medium");
       }
 
       const pageUrls = new Set(uniq.map((p) => p.url));
