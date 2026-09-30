@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireRenderMember } from "@/integrations/render/auth-middleware";
 import { aiJson, AiError } from "./ai.server";
 import { extractEmails, extractLinks, fetchPage, fetchText, hostOf, htmlToText, pageMeta, rankedLinks } from "./web.server";
 
@@ -60,14 +60,8 @@ export type ContactResult = {
   body: string;
 };
 
-async function assertMember(context: { supabase: any; userId: string }) {
-  const { data, error } = await context.supabase
-    .from("organization_members")
-    .select("organization_id")
-    .eq("user_id", context.userId)
-    .maybeSingle();
-  if (error || !data) throw new Error("You must be a workspace member to use the prospect finder.");
-  return data.organization_id as string;
+async function assertMember(context: { organizationId: string }) {
+  return context.organizationId;
 }
 
 function wrap<T>(fn: () => Promise<T>): Promise<T> {
@@ -113,7 +107,7 @@ const SENDER_KEYWORDS = ["pricing", "plans", "features", "product", "platform", 
 const TARGET_KEYWORDS = ["about", "services", "products", "solutions", "team", "careers", "jobs", "case-studies", "clients", "contact", "pricing", "industries", "projects", "portfolio", "work", "service"];
 
 export const analyzeBusiness = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireRenderMember])
   .inputValidator((d: unknown) => z.object({ website: z.string().min(3).max(300) }).parse(d))
   .handler(({ data, context }) =>
     wrap(async () => {
@@ -147,7 +141,7 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
   );
 
 export const discoverTargets = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireRenderMember])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -212,7 +206,7 @@ const targetSchema = z.object({
 });
 
 export const researchAndDraft = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireRenderMember])
   .inputValidator((d: unknown) =>
     z
       .object({
