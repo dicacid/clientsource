@@ -13,9 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({
     meta: [
-      { title: "Get started — Prospect Finder B2B" },
-      { name: "description", content: "Set up or join your team's workspace." },
-      { property: "og:title", content: "Get started — Prospect Finder B2B" },
+      { title: "Get started — SPA Intelligence" },
+      { name: "description", content: "Set up the private Solar Power Australia intelligence workspace." },
+      { property: "og:title", content: "Get started — SPA Intelligence" },
       { property: "og:description", content: "Set up or join your team's workspace." },
     ],
   }),
@@ -31,7 +31,7 @@ function Onboarding() {
   const { user } = Route.useRouteContext();
   const [state, setState] = useState<State>("loading");
   const [err, setErr] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState("Solar Power Australia");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ function Onboarding() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4">
       <div className="w-full max-w-md rounded-lg border bg-card p-8">
-        <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Prospect Finder B2B</div>
+        <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">SPA Intelligence</div>
         {state === "loading" && (
           <div className="mt-4 space-y-3">
             <Skeleton className="h-7 w-2/3" />
