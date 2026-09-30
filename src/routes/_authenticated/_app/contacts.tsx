@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { ExternalLink, Factory, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaIndustry } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/contacts")({
@@ -48,7 +49,7 @@ function IndustryIntelligence() {
         <Button type="submit" disabled={busy || !industry.trim() || !region.trim() || !focus.trim()} className="self-end"><Factory className="mr-2 h-4 w-4" />{busy ? "Researching…" : "Research market"}</Button>
       </form>
 
-      {busy && <div className="mt-4 border border-primary/30 bg-primary/5 p-3 text-sm text-muted-foreground">Searching current public companies, projects, announcements and tender signals for this market filter.</div>}
+      {busy && <div className="mt-4"><ResearchProgress detail="Searching current public companies, projects, announcements and tender signals for this market filter." /></div>}
       {error && <div className="mt-4 border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
 
       {data && <div className="mt-6 space-y-5">
