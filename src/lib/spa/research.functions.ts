@@ -46,9 +46,13 @@ Repair syntax only. Preserve the existing facts, URLs, strings, arrays and objec
 
 async function openRouterResearch<T>(orgId: string, system: string, user: string): Promise<{ data: T; modelUsed: string; usage: Usage | null }> {
   const runtime = await getAiRuntime(orgId);
-  let response: Response;
-  try {
-    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const messages = [
+    { role: "system", content: system + "\nReturn exactly one JSON object. No markdown fences." },
+    { role: "user", content: user },
+  ];
+
+  async function send(useJsonMode: boolean) {
+    return fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -57,12 +61,10 @@ async function openRouterResearch<T>(orgId: string, system: string, user: string
       },
       body: JSON.stringify({
         model: runtime.model,
-        messages: [
-          { role: "system", content: system + "\nReturn exactly one JSON object. No markdown fences." },
-          { role: "user", content: user },
-        ],
+        messages,
         max_tokens: 3500,
         temperature: 0.2,
+        ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
         tools: [
           {
             type: "openrouter:web_search",
@@ -77,6 +79,19 @@ async function openRouterResearch<T>(orgId: string, system: string, user: string
       }),
       signal: AbortSignal.timeout(180000),
     });
+  }
+
+  let response: Response;
+  try {
+    response = await send(true);
+    if (response.status === 400) {
+      const rejected = await response.text().catch(() => "");
+      if (/response[_ -]?format|json mode|structured/i.test(rejected)) {
+        response = await send(false);
+      } else {
+        throw new Error(rejected || "OpenRouter rejected the research request.");
+      }
+    }
   } catch (error) {
     const name = error instanceof Error ? error.name : "";
     if (name === "TimeoutError" || name === "AbortError") {
