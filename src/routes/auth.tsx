@@ -10,9 +10,9 @@ import { EMAIL_RE } from "@/lib/constants";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — Prospect Finder B2B" },
-      { name: "description", content: "Sign in to your team's prospecting workspace." },
-      { property: "og:title", content: "Sign in — Prospect Finder B2B" },
+      { title: "Sign in — SPA Intelligence" },
+      { name: "description", content: "Private commercial intelligence for Solar Power Australia." },
+      { property: "og:title", content: "Sign in — SPA Intelligence" },
       { property: "og:description", content: "Sign in to your team's prospecting workspace." },
     ],
   }),
@@ -61,12 +61,12 @@ function AuthPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8">
-          <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Prospect Finder B2B</div>
+        <div className="mb-8"><img src="https://solarpoweraustralia.com.au/wp-content/uploads/2021/05/Solar-power-footer-logo.svg" alt="Solar Power Australia" className="mb-5 h-12 w-auto bg-white p-1" />
+          <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">SPA Intelligence</div>
           <h1 className="mt-2 text-2xl font-semibold">
             {mode === "signin" ? "Sign in to your workspace" : "Create your account"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">Private workspace. Access by invitation.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Private commercial intelligence workspace. Human approval remains the decision point.</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-lg border bg-card p-6">
           {mode === "signup" && (
