@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type ChangeEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -75,7 +75,7 @@ function ImportPage() {
   }
 
   async function prepareCompanies(rows: Record<string, string>[]) {
-    const { data: existing, error } = await supabase
+    const { data: existing, error } = await renderDb
       .from("companies")
       .select("website")
       .eq("organization_id", ws.organizationId)
@@ -120,7 +120,7 @@ function ImportPage() {
   }
 
   async function prepareContacts(rows: Record<string, string>[]) {
-    const { data: companies, error } = await supabase
+    const { data: companies, error } = await renderDb
       .from("companies")
       .select("id, name, website")
       .eq("organization_id", ws.organizationId)
@@ -178,14 +178,14 @@ function ImportPage() {
     const failed: Invalid[] = [];
     for (let i = 0; i < valid.length; i += BATCH_SIZE) {
       const batch = valid.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from(kind).insert(batch.map((b) => b.record) as never);
+      const { error } = await renderDb.from(kind).insert(batch.map((b) => b.record) as never);
       if (!error) {
         inserted += batch.length;
         continue;
       }
       // Batch failed: retry row by row so one bad row doesn't sink the rest.
       for (const b of batch) {
-        const { error: e1 } = await supabase.from(kind).insert(b.record as never);
+        const { error: e1 } = await renderDb.from(kind).insert(b.record as never);
         if (e1) failed.push({ line: b.line, label: b.label, error: friendlyError(e1) });
         else inserted++;
       }
