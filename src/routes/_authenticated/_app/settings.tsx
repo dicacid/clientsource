@@ -45,22 +45,18 @@ function SettingsPage() {
               <CheckCircle2 className="h-4 w-4 text-chart-3" />
               {data.provider === "openrouter" ? (
                 <span>
-                  Using your own <strong>OpenRouter</strong> key — model <code className="font-mono text-xs">{data.model}</code>.
-                  Usage bills to your OpenRouter account, not workspace credits.
+                  Using <strong>OpenRouter</strong> — model <code className="font-mono text-xs">{data.model}</code>.
                 </span>
               ) : (
                 <span>
-                  Using the <strong>built-in AI</strong> (<code className="font-mono text-xs">{data.model}</code>), billed to
-                  workspace credits.
+                  <strong>OpenRouter is not configured.</strong> Add <code className="font-mono text-xs">OPENROUTER_API_KEY</code> to the Render service to enable Prospect finder AI.
                 </span>
               )}
             </div>
             <div className="flex items-start gap-2 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <p>
-                Your key is stored encrypted on the server and never appears in the browser. To add, replace or remove
-                the OpenRouter key, just ask in the chat — it is updated through a secure form. If the key is removed,
-                the workspace falls back to the built-in AI automatically.
+                The OpenRouter key is held only in the Render service environment and is never sent to the browser.
               </p>
             </div>
           </div>
