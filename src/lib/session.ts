@@ -12,7 +12,6 @@ export type Membership = { organizationId: string; orgName: string; role: Role; 
 
 /** Run after every confirmed login: claim invite, then look up membership. */
 export async function resolveMembership(): Promise<
-  | { state: "unconfirmed" }
   | { state: "member"; membership: Membership }
   | { state: "no_org" }
   | { state: "not_invited" }
@@ -20,7 +19,6 @@ export async function resolveMembership(): Promise<
   const { data: u } = await renderDb.auth.getUser();
   const user = u.user;
   if (!user) throw new Error("Not signed in");
-  if (!user.email_confirmed_at) return { state: "unconfirmed" };
   const { error: claimErr } = await renderDb.rpc("claim_invite");
   if (claimErr) throw claimErr;
   const { data: m, error } = await renderDb
