@@ -21,6 +21,9 @@ type Competitor = {
   whyCompetitor: string;
   overlapAreas: string[];
   sourceUrls: string[];
+  positioning?: string;
+  moatPreview?: string[];
+  watchSignals?: string[];
   discoveredAt: string;
   updatedAt: string;
   lastAnalysedAt: string | null;
@@ -288,7 +291,20 @@ function CompetitorIntelligence() {
                   {row.lastAnalysedAt && <span className="border border-emerald-500/30 px-1.5 py-0.5 font-mono text-[9px] uppercase text-emerald-400">analysed</span>}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{row.location || "Location being verified"}</div>
-                <p className="mt-2 max-w-3xl text-sm leading-5 text-muted-foreground">{row.whyCompetitor}</p>
+                <p className="mt-2 max-w-3xl text-sm leading-5 text-muted-foreground">{row.positioning || row.whyCompetitor}</p>
+                {!!row.moatPreview?.length && (
+                  <div className="mt-3 border-l-2 border-primary/40 pl-3">
+                    <div className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">Moat preview</div>
+                    <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                      {row.moatPreview.slice(0, 3).map((x) => <li key={x}>• {x}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {!!row.watchSignals?.length && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {row.watchSignals.slice(0, 3).map((x) => <span key={x} className="border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">Watch: {x}</span>)}
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap gap-3">
                   {row.website && <SourceLink href={row.website} label="Website" />}
                   {(row.sourceUrls ?? []).slice(0, 2).map((url, i) => <SourceLink key={url} href={url} label={`Evidence ${i + 1}`} />)}
