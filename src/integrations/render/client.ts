@@ -1,4 +1,4 @@
-import { authRequest, currentUserRequest, dbRequest, rpcRequest } from "./server.functions";
+import { authRequest, dbRequest, rpcRequest, sessionUserRequest } from "./server.functions";
 
 const STORAGE_KEY = "spa-intelligence.session";
 type AuthEvent = "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED";
@@ -198,15 +198,21 @@ export const renderDb = {
     },
 
     async signOut() {
+      try {
+        await authRequest({ data: { action: "signout" } });
+      } catch {
+        /* local sign-out still proceeds */
+      }
       setToken(null);
       emit("SIGNED_OUT");
       return { error: null };
     },
 
     async getUser() {
-      if (!token()) return { data: { user: null }, error: null };
+      const access_token = token();
+      if (!access_token) return { data: { user: null }, error: null };
       try {
-        const data = await currentUserRequest();
+        const data = await sessionUserRequest({ data: { token: access_token } });
         return { data, error: null };
       } catch (error) {
         setToken(null);
