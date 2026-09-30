@@ -41,20 +41,14 @@ function AuthPage() {
         const { error } = await renderDb.auth.signUp({
           email: email.trim(),
           password,
-          options: { emailRedirectTo: window.location.origin, data: { full_name: fullName.trim() } },
+          options: { data: { full_name: fullName.trim() } },
         });
         if (error) throw error;
-        setInfo("Check your inbox and confirm your email, then sign in here.");
+        setInfo("Account created. Sign in with your email and password.");
         setMode("signin");
       } else {
         const { error } = await renderDb.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) {
-          if (/not confirmed/i.test(error.message)) {
-            setError("Confirm your email, then sign in again.");
-            return;
-          }
-          throw error;
-        }
+        if (error) throw error;
         navigate({ to: "/onboarding" });
       }
     } catch (err) {
