@@ -1,11 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import type { Role } from "./constants";
 
 export async function signOut(queryClient: QueryClient) {
   await queryClient.cancelQueries();
   queryClient.clear();
-  await supabase.auth.signOut();
+  await renderDb.auth.signOut();
 }
 
 export type Membership = { organizationId: string; orgName: string; role: Role; userId: string; email: string };
@@ -17,13 +17,13 @@ export async function resolveMembership(): Promise<
   | { state: "no_org" }
   | { state: "not_invited" }
 > {
-  const { data: u } = await supabase.auth.getUser();
+  const { data: u } = await renderDb.auth.getUser();
   const user = u.user;
   if (!user) throw new Error("Not signed in");
   if (!user.email_confirmed_at) return { state: "unconfirmed" };
-  const { error: claimErr } = await supabase.rpc("claim_invite");
+  const { error: claimErr } = await renderDb.rpc("claim_invite");
   if (claimErr) throw claimErr;
-  const { data: m, error } = await supabase
+  const { data: m, error } = await renderDb
     .from("organization_members")
     .select("organization_id, role, organizations(name)")
     .eq("user_id", user.id)
@@ -41,7 +41,7 @@ export async function resolveMembership(): Promise<
       },
     };
   }
-  const { data: exists, error: exErr } = await supabase.rpc("workspace_exists");
+  const { data: exists, error: exErr } = await renderDb.rpc("workspace_exists");
   if (exErr) throw exErr;
   return exists ? { state: "not_invited" } : { state: "no_org" };
 }
