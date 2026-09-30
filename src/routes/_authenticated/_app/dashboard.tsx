@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Radar, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaIndustryStaged } from "@/lib/spa/research.functions";
+import { getResearchHistory } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/dashboard")({
   head: () => ({ meta: [{ title: "Opportunity Radar — SPA Intelligence" }] }),
@@ -17,14 +18,27 @@ function Source({ href }: { href: string }) {
 
 function OpportunityRadar() {
   const scan = useServerFn(researchSpaIndustryStaged);
+  const history = useServerFn(getResearchHistory);
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await history();
+        const latest = rows.find((row: any) => row.researchType === "opportunity-radar");
+        if (latest?.result) setData(latest.result);
+      } catch {
+        /* A missing history record should never block a fresh scan. */
+      }
+    })();
+  }, []);
+
   async function run() {
     setBusy(true); setError(null);
     try {
-      setData(await scan({ data: { industry: "Mining, resources and remote industrial infrastructure", region: "Australia", focus: "Remote power, BESS, hybrid energy, diesel displacement, electrification and industrial solar", businessContext: "spa" } }));
+      setData(await scan({ data: { industry: "Mining, resources and remote industrial infrastructure", region: "Australia", focus: "Remote power, BESS, hybrid energy, diesel displacement, electrification and industrial solar", businessContext: "spa", purpose: "opportunity-radar" } }));
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
   }
@@ -37,7 +51,7 @@ function OpportunityRadar() {
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">Opportunity Radar</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">What should Brett pay attention to? This scan searches current public signals and keeps evidence separate from commercial inference.</p>
         </div>
-        <Button onClick={run} disabled={busy}><Radar className="mr-2 h-4 w-4" />{busy ? "Scanning…" : "Run Australian opportunity scan"}</Button>
+        <Button onClick={run} disabled={busy}><Radar className="mr-2 h-4 w-4" />{busy ? "Scanning…" : data ? "Refresh Australian opportunity scan" : "Run Australian opportunity scan"}</Button>
       </header>
 
       {busy && <div className="mb-5"><ResearchProgress detail="Searching current Australian organisations, project signals and tenders, then matching them against SPA capabilities." /></div>}
@@ -83,7 +97,7 @@ function OpportunityRadar() {
             <div className="divide-y divide-border">{data.tenders.map((t: any, i: number) => <article key={i} className="p-4"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-semibold">{t.title}</h3><p className="mt-1 text-xs text-muted-foreground">{t.issuer} · Ref {t.reference || "not published"} · Closing {t.closing_date || "not found"}</p></div><Source href={t.source_url} /></div><p className="mt-3 text-sm text-muted-foreground"><strong className="text-foreground">SPA fit:</strong> {t.spa_fit}</p></article>)}</div>
           </section>}
 
-          <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}</div>
+          <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}{data.verification ? ` · Verified live organisations: ${data.verification.verifiedLiveOrganisations}/${data.verification.discoveredOrganisations}` : ""}</div>
         </div>
       )}
     </div>
