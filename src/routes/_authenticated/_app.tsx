@@ -27,6 +27,7 @@ const PRIMARY = [
 const SECONDARY = [
   { to: "/prospects", label: "Saved Opportunities", icon: Archive },
   { to: "/members", label: "Approval Queue", icon: ShieldCheck },
+  { to: "/capabilities", label: "SPA Capability Profile", icon: Activity },
   { to: "/settings", label: "AI & Models", icon: Settings },
 ] as const;
 
