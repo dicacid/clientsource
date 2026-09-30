@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ExternalLink, Radar, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
-import { researchSpaIndustry } from "@/lib/spa/research.functions";
+import { researchSpaIndustryStaged } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/dashboard")({
   head: () => ({ meta: [{ title: "Opportunity Radar — SPA Intelligence" }] }),
@@ -16,7 +16,7 @@ function Source({ href }: { href: string }) {
 }
 
 function OpportunityRadar() {
-  const scan = useServerFn(researchSpaIndustry);
+  const scan = useServerFn(researchSpaIndustryStaged);
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
