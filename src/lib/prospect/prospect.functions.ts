@@ -47,7 +47,17 @@ export type Target = {
   why_fit: string;
 };
 
+export type OpportunitySignal = {
+  signal: string;
+  source_url: string;
+  why_now: string;
+  confidence: "high" | "medium" | "low";
+};
+
 export type ContactResult = {
+  opportunity_score: number;
+  qualification_summary: string;
+  trigger_signals: OpportunitySignal[];
   contact_name: string | null;
   contact_title: string | null;
   email: string | null;
@@ -239,13 +249,15 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const nonLive = an.capability_status.filter((c) => c.status !== "live").map((c) => c.capability).filter((c) => c.length >= 4);
       const senderEvidence = [an.value_proposition, an.what_it_does, ...an.pricing_summary, ...an.differentiators, ...an.proof_points, ...an.capability_status.map((c) => `${c.capability} ${c.evidence}`)].join(" ").toLowerCase();
 
-      type Draft = { contact_name: string | null; contact_title: string | null; email: string | null; source_url: string | null; evidence_map: (EvidenceItem & { selected?: boolean })[]; subject: string; body: string };
+      type Draft = { contact_name: string | null; contact_title: string | null; email: string | null; source_url: string | null; evidence_map: (EvidenceItem & { selected?: boolean })[]; trigger_signals?: OpportunitySignal[]; qualification_summary?: string; subject: string; body: string };
       const system =
         "You research B2B prospects and write short, specific, pain-first cold outreach emails. Use ONLY facts present in the provided page text, except any explicitly labelled operator-approved sender claims. Never invent people, email addresses, prices, offers, capabilities or problems. Never assume a problem merely because the industry commonly has it. Every inference must follow from an observed fact on their site.";
       const adoptionInstruction = approved
         ? `\nOPERATOR-APPROVED SENDER ASSERTIONS for ${hostOf(data.website)} only (approved by the sender personally; NOT target observations and NOT from the site scan):\n${approved}\nWeave the relevant ones in naturally after the pain and capability discussion, BEFORE the CTA, as practical objection-handling. Vary wording; do not paste them verbatim as a list. These are the ONLY exception to the verified-facts rule; they do not approve anything they don't explicitly say.\n`
         : "";
-      const prompt = `Target company: ${data.target.name} (${domain}), ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSENDER (commercial facts below are verified from the sender's own site, except explicitly labelled operator-approved campaign claims)\nSender: ${data.sender.name} <${data.sender.email}>\nProduct: ${an.business_name} (${data.website}): ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nDifferentiators / moat: ${an.differentiators.join("; ") || "(none stated)"}\nPricing (verified): ${an.pricing_summary.join("; ") || "(none found, so make NO pricing, free, trial, credit-card or plan claims)"}\nProof points (verified): ${an.proof_points.join("; ") || "(none found)"}\nCapabilities with status:\n- ${caps}\n${adoptionInstruction}\nTasks:\n1. Build evidence_map (3-6 items) BEFORE writing. Each item: observed_fact (literally on their pages), source_url (exact page URL above), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, else "INFERENCE" that follows directly from the observed_fact), consequence (practical cost in their terms), role_relevance, matched_sender_capability (only from the sender capabilities list, or "none"), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"), selected (true for the 2-3 items you will use in the email; 4 only if evidence is unusually strong). Rank for selection by: operational cost/frustration, recurrence, relevance to the chosen contact, evidence confidence, strength of sender match. Only select items whose matched capability is live. Skip anything you can't ground in the page text.\n2. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n3. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n4. source_url: page URL where the person or email appeared, or null.\n5. Write the email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approved ? " Include the operator-approved sender assertions after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free offers/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approved ? " EXCEPTION: statements explicitly contained in the operator-approved sender assertions above may be used." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, subject, body.`;
+      const prompt = `Target company: ${data.target.name} (${domain}), ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSENDER (commercial facts below are verified from the sender's own site, except explicitly labelled operator-approved campaign claims)\nSender: ${data.sender.name} <${data.sender.email}>\nProduct: ${an.business_name} (${data.website}): ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nDifferentiators / moat: ${an.differentiators.join("; ") || "(none stated)"}\nPricing (verified): ${an.pricing_summary.join("; ") || "(none found, so make NO pricing, free, trial, credit-card or plan claims)"}\nProof points (verified): ${an.proof_points.join("; ") || "(none found)"}\nCapabilities with status:\n- ${caps}\n${adoptionInstruction}\nTasks:\n1. Build evidence_map (3-6 items) BEFORE writing. Each item: observed_fact (literally on their pages), source_url (exact page URL above), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, else "INFERENCE" that follows directly from the observed_fact), consequence (practical cost in their terms), role_relevance, matched_sender_capability (only from the sender capabilities list, or "none"), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"), selected (true for the 2-3 items you will use in the email; 4 only if evidence is unusually strong). Rank for selection by: operational cost/frustration, recurrence, relevance to the chosen contact, evidence confidence, strength of sender match. Only select items whose matched capability is live. Skip anything you can't ground in the page text.\n2. Identify trigger_signals (0-5) that make outreach timely. A trigger must be an explicit current/recent fact in the supplied target pages, such as a new project, expansion, hiring, launch, contract, event, location, service or operational change. Each item: signal, source_url (exact supplied URL), why_now, confidence. Do not invent dates or recency. If there is no genuine trigger, return [].
+3. Write qualification_summary in 1-2 sentences explaining why this prospect merits attention, grounded only in the evidence map and trigger signals. Do not include a numeric score.
+4. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n5. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n6. source_url: page URL where the person or email appeared, or null.\n7. Write the email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approved ? " Include the operator-approved sender assertions after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free offers/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approved ? " EXCEPTION: statements explicitly contained in the operator-approved sender assertions above may be used." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, trigger_signals, qualification_summary, subject, body.`;
 
       let r = await aiJson<Draft>(system, prompt, "medium");
       const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
@@ -276,6 +288,34 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         }))
         .sort((a, b) => Number(b.selected) - Number(a.selected) || rank[a.confidence] - rank[b.confidence]);
 
+      const trigger_signals: OpportunitySignal[] = (Array.isArray(r.trigger_signals) ? r.trigger_signals : [])
+        .filter((x) => x && x.signal && pageUrls.has(x.source_url))
+        .slice(0, 5)
+        .map((x) => ({
+          signal: String(x.signal).slice(0, 300),
+          source_url: x.source_url,
+          why_now: String(x.why_now ?? "").slice(0, 300),
+          confidence: pick(x.confidence, ["high", "medium", "low"] as const, "low"),
+        }));
+
+      // Deterministic qualification score: evidence quality + live capability fit + timely triggers + contactability.
+      // The model supplies evidence; it does not get to invent the score.
+      const selected = evidence_map.filter((e) => e.selected);
+      const highEvidence = evidence_map.filter((e) => e.confidence === "high").length;
+      const liveMatches = selected.filter((e) => e.capability_status === "live" && e.matched_sender_capability.toLowerCase() !== "none").length;
+      const highTriggers = trigger_signals.filter((x) => x.confidence === "high").length;
+      const opportunity_score = Math.min(
+        100,
+        Math.round(
+          Math.min(35, selected.length * 10 + highEvidence * 5) +
+            Math.min(30, liveMatches * 15) +
+            Math.min(20, trigger_signals.length * 5 + highTriggers * 5) +
+            (emails.length ? 10 : 0) +
+            (r.contact_name ? 5 : 0),
+        ),
+      );
+      const qualification_summary = String(r.qualification_summary ?? "").slice(0, 600);
+
       // Guardrails on the final text.
       const noDash = (t: string) => t.replace(/\s*[\u2014\u2013]\s*/g, ", ").replace(/ ,/g, ",").replace(/,\s*,/g, ",");
       const sentences = (t: string, keep: (x: string) => boolean) =>
@@ -305,6 +345,9 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const name = r.contact_name && lowerCorpus.includes(r.contact_name.toLowerCase().split(" ").pop() ?? "~~") ? r.contact_name.slice(0, 120) : null;
       const generic = email ? /^(info|hello|contact|contactus|sales|support|team|office|admin|enquiries|enquiry|inquiries|inquiry|mail|hi|rental|rentals|hire|hiredesk|bookings|booking|events|general|reception|marketing|installation|integration|service|press|careers|jobs)@/.test(email) : false;
       return {
+        opportunity_score,
+        qualification_summary,
+        trigger_signals,
         contact_name: name,
         contact_title: name ? (r.contact_title?.slice(0, 120) ?? null) : null,
         email,
