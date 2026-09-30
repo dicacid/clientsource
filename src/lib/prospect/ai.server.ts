@@ -34,9 +34,13 @@ function parseJson<T>(text: string): T {
 }
 
 async function requestJson<T>(apiKey: string, model: string, system: string, user: string): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const messages = [
+    { role: "system", content: system + "\nRespond with a single valid JSON object only. No markdown." },
+    { role: "user", content: user },
+  ];
+
+  async function send(useJsonMode: boolean) {
+    return fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -45,14 +49,24 @@ async function requestJson<T>(apiKey: string, model: string, system: string, use
       },
       body: JSON.stringify({
         model,
-        messages: [
-          { role: "system", content: system + "\nRespond with a single valid JSON object only. No markdown." },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_object" },
+        messages,
+        ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
       }),
       signal: AbortSignal.timeout(120000),
     });
+  }
+
+  let response: Response;
+  try {
+    response = await send(true);
+    if (response.status === 400) {
+      const body = await response.text().catch(() => "");
+      if (/response[_ -]?format|json mode|structured/i.test(body)) {
+        response = await send(false);
+      } else {
+        throw new AiError(body || "OpenRouter rejected the request.", 400);
+      }
+    }
   } catch (error) {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
       throw new AiError(`AI request exceeded 120 seconds using ${model}. Retry or choose a faster model in AI & Models.`, 504);
