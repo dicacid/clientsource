@@ -1,6 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { executeDbRequest, executeRpc, signIn, signUp, userById, type DbRequest } from "./state.server";
+import {
+  executeDbRequest,
+  executeRpc,
+  signIn,
+  signUp,
+  userById,
+  verifySessionToken,
+  type DbRequest,
+} from "./state.server";
 import { requireRenderUser } from "./auth-middleware";
 import { clearSessionCookie, setSessionCookie } from "./session.server";
 
@@ -32,6 +40,14 @@ export const authRequest = createServerFn({ method: "POST" })
     const result = await signIn(data.email, data.password);
     setSessionCookie(result.access_token);
     return result;
+  });
+
+export const sessionUserRequest = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ token: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const user = await verifySessionToken(data.token);
+    if (!user) throw new Error("Unauthorized: session expired. Sign in again.");
+    return { user: await userById(user.id) };
   });
 
 export const currentUserRequest = createServerFn({ method: "GET" })
