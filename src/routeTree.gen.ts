@@ -20,6 +20,7 @@ import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authent
 import { Route as AuthenticatedAppImportRouteImport } from './routes/_authenticated/_app/import'
 import { Route as AuthenticatedAppMembersRouteImport } from './routes/_authenticated/_app/members'
 import { Route as AuthenticatedAppProspectRouteImport } from './routes/_authenticated/_app/prospect'
+import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenticated/_app/settings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -78,6 +79,12 @@ const AuthenticatedAppProspectRoute =
     path: '/prospect',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppSettingsRoute =
+  AuthenticatedAppSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/import': typeof AuthenticatedAppImportRoute
   '/members': typeof AuthenticatedAppMembersRoute
   '/prospect': typeof AuthenticatedAppProspectRoute
+  '/settings': typeof AuthenticatedAppSettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -100,6 +108,7 @@ export interface FileRoutesByTo {
   '/import': typeof AuthenticatedAppImportRoute
   '/members': typeof AuthenticatedAppMembersRoute
   '/prospect': typeof AuthenticatedAppProspectRoute
+  '/settings': typeof AuthenticatedAppSettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -114,6 +123,7 @@ export interface FileRoutesById {
   '/_authenticated/_app/import': typeof AuthenticatedAppImportRoute
   '/_authenticated/_app/members': typeof AuthenticatedAppMembersRoute
   '/_authenticated/_app/prospect': typeof AuthenticatedAppProspectRoute
+  '/_authenticated/_app/settings': typeof AuthenticatedAppSettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/members'
     | '/prospect'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/members'
     | '/prospect'
+    | '/settings'
   id:
     | '__root__'
     | '/'
@@ -151,6 +163,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_app/import'
     | '/_authenticated/_app/members'
     | '/_authenticated/_app/prospect'
+    | '/_authenticated/_app/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -238,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppProspectRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/settings': {
+      id: '/_authenticated/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedAppSettingsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
@@ -248,6 +268,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppImportRoute: typeof AuthenticatedAppImportRoute
   AuthenticatedAppMembersRoute: typeof AuthenticatedAppMembersRoute
   AuthenticatedAppProspectRoute: typeof AuthenticatedAppProspectRoute
+  AuthenticatedAppSettingsRoute: typeof AuthenticatedAppSettingsRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
@@ -257,6 +278,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppImportRoute: AuthenticatedAppImportRoute,
   AuthenticatedAppMembersRoute: AuthenticatedAppMembersRoute,
   AuthenticatedAppProspectRoute: AuthenticatedAppProspectRoute,
+  AuthenticatedAppSettingsRoute: AuthenticatedAppSettingsRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
