@@ -547,6 +547,7 @@ export const researchSpaIndustryStaged = createServerFn({ method: "POST" })
     region: z.string().min(2).max(200).default("Australia"),
     focus: z.string().min(2).max(300),
     businessContext,
+    purpose: z.enum(["industry","opportunity-radar"]).default("industry"),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const profile = BUSINESS_CONTEXTS[data.businessContext];
