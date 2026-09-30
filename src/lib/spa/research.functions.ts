@@ -331,6 +331,9 @@ export const discoverSpaCompetitors = createServerFn({ method: "POST" })
         why_competitor: string;
         overlap_areas: string[];
         source_urls: string[];
+        positioning: string;
+        moat_preview: string[];
+        watch_signals: string[];
       }[];
       landscape_notes: string[];
     };
@@ -373,7 +376,10 @@ Return JSON:
       "category": "direct" | "adjacent" | "large-scale",
       "why_competitor": "evidence-based explanation",
       "overlap_areas": ["..."],
-      "source_urls": ["https://..."]
+      "source_urls": ["https://..."],
+      "positioning": "concise evidence-based market positioning",
+      "moat_preview": ["1-3 defensible-advantage hypotheses, clearly tentative"],
+      "watch_signals": ["specific things SPA should monitor about this competitor"]
     }
   ],
   "landscape_notes": ["..."]
@@ -396,6 +402,9 @@ Do not output a company without a source URL.`;
         whyCompetitor: String(item.why_competitor ?? "").trim().slice(0, 1500),
         overlapAreas: Array.isArray(item.overlap_areas) ? item.overlap_areas.map(String).map((x) => x.trim()).filter(Boolean).slice(0, 12) : [],
         sourceUrls: item.source_urls.map(String).map((x) => x.trim()).filter((x) => /^https?:\/\//i.test(x)).slice(0, 12),
+        positioning: String(item.positioning ?? "").trim().slice(0, 1200),
+        moatPreview: Array.isArray(item.moat_preview) ? item.moat_preview.map(String).map((x) => x.trim()).filter(Boolean).slice(0, 4) : [],
+        watchSignals: Array.isArray(item.watch_signals) ? item.watch_signals.map(String).map((x) => x.trim()).filter(Boolean).slice(0, 6) : [],
       }))
       .filter((item) => item.sourceUrls.length);
 
