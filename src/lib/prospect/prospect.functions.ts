@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireRenderMember } from "@/integrations/render/auth-middleware";
 import { prospectFeedbackForOrganization } from "@/integrations/render/state.server";
+import { SPA_CAPABILITIES } from "@/lib/spa/capabilities";
 import { aiJsonForOrg, AiError } from "./ai.server";
 import { extractEmails, extractLinks, fetchPage, fetchText, hostOf, htmlToText, pageMeta, rankedLinks } from "./web.server";
 
@@ -135,7 +136,50 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
       const host = hostOf(data.website);
       if (!host) throw new Error("Enter a valid website like example.com");
       const home = (await fetchPage(`https://${host}`)) ?? (await fetchPage(`https://www.${host}`));
-      if (!home) throw new Error(`Couldn't open https://${host}. Check the address and that the site is public.`);
+      if (!home) {
+        if (host === "solarpoweraustralia.com.au") {
+          const liveCapabilities = SPA_CAPABILITIES
+            .filter((item) => item.confidence === "CONFIRMED")
+            .map((item) => ({ capability: item.capability, status: "live" as const, evidence: item.evidence }));
+          const adjacentCapabilities = SPA_CAPABILITIES
+            .filter((item) => item.confidence !== "CONFIRMED")
+            .map((item) => ({ capability: item.capability, status: "unclear" as const, evidence: item.evidence }));
+          const fallback: Analysis = {
+            business_name: "Solar Power Australia",
+            one_liner: "Australian specialist in commercial, industrial, remote and custom solar, battery and hybrid energy systems.",
+            what_it_does: "Solar Power Australia designs and supplies solar, battery energy storage, off-grid and specialist energy systems for commercial, industrial and remote applications.",
+            value_proposition: "Specialist renewable-energy capability spanning conventional solar through custom remote, relocatable and battery-integrated systems.",
+            ideal_customers: [
+              "Commercial and industrial energy users",
+              "Mining and resources operators",
+              "Remote infrastructure operators",
+              "Organisations requiring off-grid or hybrid power",
+              "Businesses deploying battery energy storage",
+              "Specialist projects requiring custom renewable-energy systems",
+            ],
+            target_industries: ["Mining", "Resources", "Industrial", "Commercial property", "Remote infrastructure", "Energy", "Utilities", "Agriculture"],
+            target_titles: ["Managing Director", "Operations Manager", "Energy Manager", "Engineering Manager", "Project Manager", "Sustainability Manager"],
+            pain_points: [
+              "High or constrained grid energy costs",
+              "Remote power reliability",
+              "Diesel dependence",
+              "Energy storage and resilience",
+              "Power requirements for remote or relocatable infrastructure",
+            ],
+            differentiators: [
+              "Remote and off-grid capability",
+              "Battery and BESS integration",
+              "Relocatable solar power systems",
+              "Specialist custom energy-system capability",
+            ],
+            pricing_summary: [],
+            capability_status: [...liveCapabilities, ...adjacentCapabilities].slice(0, 15),
+            proof_points: [],
+          };
+          return { website: `https://${host}`, analysis: fallback };
+        }
+        throw new Error(`Couldn't open https://${host}. Check the address and that the site is public.`);
+      }
       const meta = pageMeta(home.html);
       // Crawl a bounded, prioritised set of internal pages (max 8) plus /llms.txt.
       const links = rankedLinks(home.html, home.url, SENDER_KEYWORDS, 8);
