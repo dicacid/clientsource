@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,13 +38,13 @@ function Members() {
     queryKey: ["members", ws.organizationId],
     queryFn: async () => {
       const [m, inv] = await Promise.all([
-        supabase.from("organization_members").select("user_id, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
-        supabase.from("pending_invites").select("id, email, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
+        renderDb.from("organization_members").select("user_id, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
+        renderDb.from("pending_invites").select("id, email, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
       ]);
       if (m.error) throw m.error;
       if (inv.error) throw inv.error;
       const ids = m.data.map((x) => x.user_id);
-      const { data: profs, error } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+      const { data: profs, error } = await renderDb.from("profiles").select("id, full_name").in("id", ids);
       if (error) throw error;
       const names = Object.fromEntries((profs ?? []).map((p) => [p.id, p.full_name]));
       return { members: m.data.map((x) => ({ ...x, name: names[x.user_id] as string | null })), invites: inv.data };
@@ -58,7 +58,7 @@ function Members() {
     e.preventDefault();
     if (!EMAIL_RE.test(email.trim())) return toast.error("Enter a valid email.");
     setBusy(true);
-    const { error } = await supabase.from("pending_invites").insert({
+    const { error } = await renderDb.from("pending_invites").insert({
       organization_id: ws.organizationId,
       email: email.trim().toLowerCase(),
       role: isOwner ? role : "member",
@@ -72,21 +72,21 @@ function Members() {
   }
 
   async function removeInvite(id: string) {
-    const { error } = await supabase.from("pending_invites").delete().eq("id", id);
+    const { error } = await renderDb.from("pending_invites").delete().eq("id", id);
     if (error) return toast.error(friendlyError(error));
     toast.success("Invite removed");
     refresh();
   }
 
   async function setMemberRole(userId: string, newRole: string) {
-    const { error } = await supabase.rpc("set_member_role", { target_user_id: userId, new_role: newRole });
+    const { error } = await renderDb.rpc("set_member_role", { target_user_id: userId, new_role: newRole });
     if (error) return toast.error(friendlyError(error));
     toast.success("Role updated");
     refresh();
   }
 
   async function removeMember(userId: string) {
-    const { error, count } = await supabase
+    const { error, count } = await renderDb
       .from("organization_members")
       .delete({ count: "exact" })
       .eq("organization_id", ws.organizationId)
