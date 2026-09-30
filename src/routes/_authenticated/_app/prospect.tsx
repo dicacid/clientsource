@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
+import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { SPA_CAPABILITIES } from "@/lib/spa/capabilities";
 import { researchSpaCompany } from "@/lib/spa/research.functions";
 import { addApprovalItem, getSpaCapabilityProfile } from "@/lib/spa/store.functions";
@@ -150,11 +151,8 @@ function ProspectPage() {
       </form>
 
       {busy && (
-        <div className="mt-4 border border-primary/30 bg-primary/5 p-4">
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Live research running</div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The server is executing direct-site retrieval, current public-web research, evidence classification, SPA capability matching and dossier assembly. One failed source will not abort the run.
-          </p>
+        <div className="mt-4">
+          <ResearchProgress detail="Direct-site retrieval, current public-web research, capability matching and dossier assembly are running." />
         </div>
       )}
 
