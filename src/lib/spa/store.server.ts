@@ -22,6 +22,7 @@ async function redis(): Promise<RedisClientType> {
 
 const historyKey = (orgId: string) => `spa-intelligence:history:v1:${orgId}`;
 const approvalKey = (orgId: string) => `spa-intelligence:approvals:v1:${orgId}`;
+const capabilityKey = (orgId: string) => `spa-intelligence:capabilities:v1:${orgId}`;
 
 export type ResearchRunRecord = {
   id: string;
@@ -108,4 +109,19 @@ export async function changeApprovalState(orgId: string, id: string, state: Appr
   writeQueue = run;
   await run;
   return found;
+}
+
+
+export async function getCapabilityProfile(orgId: string): Promise<string | null> {
+  const r = await redis();
+  return r.get(capabilityKey(orgId));
+}
+
+export async function saveCapabilityProfile(orgId: string, value: string) {
+  const text = value.trim();
+  if (!text) throw new Error("Capability profile cannot be empty.");
+  if (text.length > 16000) throw new Error("Capability profile is too large.");
+  const r = await redis();
+  await r.set(capabilityKey(orgId), text);
+  return text;
 }
