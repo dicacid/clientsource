@@ -3,7 +3,7 @@ import { useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,7 +50,7 @@ function Companies() {
   const hasFilters = Object.values(filters).some(Boolean);
 
   function buildQuery(select: string, withCount: boolean) {
-    let q = supabase
+    let q = renderDb
       .from("companies")
       .select(select, withCount ? { count: "exact" } : undefined)
       .eq("organization_id", ws.organizationId);
@@ -89,7 +89,7 @@ function Companies() {
   }
 
   async function del(c: CompanyRow) {
-    const { error } = await supabase.from("companies").delete().eq("id", c.id);
+    const { error } = await renderDb.from("companies").delete().eq("id", c.id);
     if (error) return toast.error(friendlyError(error));
     toast.success("Company deleted");
     refresh();
@@ -103,7 +103,7 @@ function Companies() {
   }
 
   async function inlineStatus(id: string, s: string) {
-    const { error } = await supabase.from("companies").update({ status: s }).eq("id", id);
+    const { error } = await renderDb.from("companies").update({ status: s }).eq("id", id);
     if (error) return toast.error(friendlyError(error));
     toast.success("Status updated");
     refresh();
