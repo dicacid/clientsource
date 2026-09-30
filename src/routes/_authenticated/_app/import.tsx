@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Lightbulb, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaVentureStaged } from "@/lib/spa/research.functions";
+import { getResearchHistory } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/import")({
   head: () => ({ meta: [{ title: "Ventures & Innovation — SPA Intelligence" }] }),
@@ -15,10 +16,23 @@ export const Route = createFileRoute("/_authenticated/_app/import")({
 
 function Ventures() {
   const research = useServerFn(researchSpaVentureStaged);
+  const history = useServerFn(getResearchHistory);
   const [query, setQuery] = useState("https://elmofo.com.au/");
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await history();
+        const latest = rows.find((row: any) => row.researchType === "venture-staged");
+        if (latest?.result) setResult(latest.result);
+      } catch {
+        /* No saved venture research yet. */
+      }
+    })();
+  }, []);
 
   async function run(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError(null); setResult(null);
