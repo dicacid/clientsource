@@ -2,7 +2,7 @@ import { createClient, type RedisClientType } from "redis";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 const AI_PREFIX = "spa-intelligence:ai:v1:";
-const DEFAULT_MODEL = "openrouter/auto";
+const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
 
 type Stored = {
   keyCipher?: string;
