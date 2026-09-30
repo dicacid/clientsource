@@ -5,6 +5,7 @@ import { Lightbulb, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
+import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaCompany } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/import")({
@@ -51,7 +52,7 @@ function Ventures() {
         </form>
       </section>
 
-      {busy && <div className="mt-4 border border-primary/30 bg-primary/5 p-3 text-sm text-muted-foreground">Researching current EV/innovation evidence, people, projects, partnerships and commercialisation signals.</div>}
+      {busy && <div className="mt-4"><ResearchProgress detail="Researching current EV and innovation evidence, people, projects, partnerships and commercialisation signals." /></div>}
       {error && <div className="mt-4 border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
       {result && <IntelligenceResult result={result} title="Ventures & innovation dossier" />}
     </div>
