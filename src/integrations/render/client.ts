@@ -1,4 +1,4 @@
-import { authRequest, dbRequest, rpcRequest, sessionUserRequest } from "./server.functions";
+import { authRequest, currentUserRequest, dbRequest, rpcRequest, sessionUserRequest } from "./server.functions";
 
 const STORAGE_KEY = "spa-intelligence.session";
 type AuthEvent = "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED";
@@ -210,12 +210,17 @@ export const renderDb = {
 
     async getUser() {
       const access_token = token();
-      if (!access_token) return { data: { user: null }, error: null };
       try {
-        const data = await sessionUserRequest({ data: { token: access_token } });
+        if (access_token) {
+          const data = await sessionUserRequest({ data: { token: access_token } });
+          return { data, error: null };
+        }
+        // HttpOnly cookie fallback keeps the browser signed in even if localStorage
+        // is unavailable or gets cleared during a hard reload / browser mode change.
+        const data = await currentUserRequest();
         return { data, error: null };
       } catch (error) {
-        setToken(null);
+        if (access_token) setToken(null);
         return { data: { user: null }, error: err(error) };
       }
     },
