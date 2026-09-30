@@ -37,6 +37,8 @@ async function openRouterResearch<T>(orgId: string, system: string, user: string
           { role: "system", content: system + "\nReturn exactly one JSON object. No markdown fences." },
           { role: "user", content: user },
         ],
+        max_tokens: 3500,
+        temperature: 0.2,
         tools: [
           {
             type: "openrouter:web_search",
