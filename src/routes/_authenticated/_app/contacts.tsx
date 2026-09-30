@@ -5,7 +5,7 @@ import { ExternalLink, Factory, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
-import { researchSpaIndustry } from "@/lib/spa/research.functions";
+import { researchSpaIndustryStaged } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/contacts")({
   head: () => ({ meta: [{ title: "Industries — SPA Intelligence" }] }),
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_authenticated/_app/contacts")({
 });
 
 function IndustryIntelligence() {
-  const research = useServerFn(researchSpaIndustry);
+  const research = useServerFn(researchSpaIndustryStaged);
   const navigate = useNavigate();
   const [industry, setIndustry] = useState("Mining");
   const [region, setRegion] = useState("Australia");
