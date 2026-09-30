@@ -267,7 +267,7 @@ function ProspectPage() {
       company_id: companyId,
       contact_id: contactId,
       type: "note",
-      body: `Draft outreach\nSubject: ${res.subject}\n\n${res.body}`,
+      body: `Opportunity score: ${res.opportunity_score}/100\n${res.qualification_summary}\n\nDraft outreach\nSubject: ${res.subject}\n\n${res.body}`,
       created_by: ws.userId,
     });
     if (error) return toast.error(friendlyError(error));
@@ -565,6 +565,33 @@ function ProspectCard({
                 </div>
               )}
             </div>
+          </div>
+          <div className="rounded-md border bg-background/40 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Opportunity intelligence</div>
+                <p className="mt-1 text-sm">{res.qualification_summary || "Qualified from the grounded evidence below."}</p>
+              </div>
+              <div className="rounded-md bg-primary/10 px-3 py-2 text-center">
+                <div className="font-mono text-2xl font-semibold text-primary">{res.opportunity_score}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">score / 100</div>
+              </div>
+            </div>
+            {(res.trigger_signals?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <div className="text-xs text-muted-foreground">Why now</div>
+                <ul className="mt-1 space-y-1.5">
+                  {res.trigger_signals.map((t, j) => (
+                    <li key={j} className="text-sm">
+                      <a href={t.source_url} target="_blank" rel="noreferrer" className="font-medium hover:text-primary">
+                        {t.signal}
+                      </a>
+                      <span className="text-muted-foreground"> · {t.why_now} · {t.confidence}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           <PainMap items={res.evidence_map ?? []} pages={res.pages_read?.length ?? 0} />
           <Input value={res.subject} onChange={(e) => onChange({ subject: e.target.value })} aria-label="Subject" className="font-medium" />
