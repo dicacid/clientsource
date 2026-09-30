@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ExternalLink, Factory, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaIndustryStaged } from "@/lib/spa/research.functions";
+import { getResearchHistory } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/contacts")({
   head: () => ({ meta: [{ title: "Industries — SPA Intelligence" }] }),
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/_authenticated/_app/contacts")({
 
 function IndustryIntelligence() {
   const research = useServerFn(researchSpaIndustryStaged);
+  const history = useServerFn(getResearchHistory);
   const navigate = useNavigate();
   const [industry, setIndustry] = useState("Mining");
   const [region, setRegion] = useState("Australia");
@@ -22,9 +24,21 @@ function IndustryIntelligence() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const rows = await history();
+        const latest = rows.find((row: any) => row.researchType === "industry-staged");
+        if (latest?.result) setData(latest.result);
+      } catch {
+        /* No saved scan yet. */
+      }
+    })();
+  }, []);
+
   async function run(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError(null);
-    try { setData(await research({ data: { industry, region, focus, businessContext: "spa" } })); }
+    try { setData(await research({ data: { industry, region, focus, businessContext: "spa", purpose: "industry" } })); }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
   }
@@ -70,7 +84,7 @@ function IndustryIntelligence() {
 
         {!!data.tenders?.length && <section className="border border-border bg-card"><div className="border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Tender intelligence</div><div className="divide-y divide-border">{data.tenders.map((t: any, i: number) => <article key={i} className="p-4"><strong>{t.title}</strong><p className="mt-1 text-xs text-muted-foreground">{t.issuer} · Ref {t.reference || "not published"} · Closing {t.closing_date || "not found"} · {t.location || "Location not stated"}</p><p className="mt-2 text-sm text-muted-foreground">{t.spa_fit}</p><a href={t.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary">Original source ↗</a></article>)}</div></section>}
 
-        <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}</div>
+        <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}{data.verification ? ` · Verified live organisations: ${data.verification.verifiedLiveOrganisations}/${data.verification.discoveredOrganisations}` : ""}</div>
       </div>}
 
       {!data && !busy && !error && <div className="mt-8 grid min-h-48 place-items-center border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Defaults are loaded for the required demo test: Mining · Australia · Remote Power / BESS.</div>}
