@@ -41,7 +41,11 @@ async function publicUrl(raw: string): Promise<URL> {
     return url;
   }
   const addresses = await lookup(hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some((entry) => privateAddress(entry.address))) {
+  // Public sites can legitimately publish a mixture of A/AAAA records. Reject the
+  // hostname only when DNS gives us no usable public destination. The previous
+  // any-private-address rule caused false negatives on otherwise public sites.
+  const publicAddresses = addresses.filter((entry) => !privateAddress(entry.address));
+  if (!publicAddresses.length) {
     throw new Error("Private or unresolved network destinations are not allowed.");
   }
   return url;
