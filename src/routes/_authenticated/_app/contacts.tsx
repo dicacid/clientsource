@@ -3,7 +3,7 @@ import { useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Copy, Pencil, Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -45,7 +45,7 @@ function Contacts() {
   const hasFilters = !!search || !!status || overdue;
 
   function buildQuery(withCount: boolean) {
-    let q = supabase
+    let q = renderDb
       .from("contacts")
       .select("*, companies(name, website)", withCount ? { count: "exact" } : undefined)
       .eq("organization_id", ws.organizationId);
@@ -72,7 +72,7 @@ function Contacts() {
   };
 
   async function del(c: ContactRow) {
-    const { error } = await supabase.from("contacts").delete().eq("id", c.id);
+    const { error } = await renderDb.from("contacts").delete().eq("id", c.id);
     if (error) return toast.error(friendlyError(error));
     toast.success("Contact deleted");
     refresh();
