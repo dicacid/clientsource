@@ -10,7 +10,7 @@ import { getCapabilityProfile, saveResearchRun } from "./store.server";
 type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number | string };
 
 function parseJson<T>(text: string): T {
-  const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const cleaned = text.trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/, "").trim();
   try { return JSON.parse(cleaned) as T; } catch {
     const first = cleaned.indexOf("{");
     const last = cleaned.lastIndexOf("}");
@@ -21,23 +21,45 @@ function parseJson<T>(text: string): T {
 
 async function openRouterResearch<T>(orgId: string, system: string, user: string): Promise<{ data: T; modelUsed: string; usage: Usage | null }> {
   const runtime = await getAiRuntime(orgId);
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + runtime.apiKey,
-      "X-Title": "SPA Intelligence",
-    },
-    body: JSON.stringify({
-      model: runtime.model,
-      messages: [
-        { role: "system", content: system + "\nReturn exactly one JSON object. No markdown fences." },
-        { role: "user", content: user },
-      ],
-      plugins: [{ id: "web", max_results: 8 }],
-    }),
-    signal: AbortSignal.timeout(90000),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + runtime.apiKey,
+        "X-Title": "SPA Intelligence",
+      },
+      body: JSON.stringify({
+        model: runtime.model,
+        messages: [
+          { role: "system", content: system + "\nReturn exactly one JSON object. No markdown fences." },
+          { role: "user", content: user },
+        ],
+        tools: [
+          {
+            type: "openrouter:web_search",
+            parameters: {
+              engine: "parallel",
+              max_results: 4,
+              max_total_results: 8,
+              search_context_size: "medium",
+            },
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(180000),
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      throw new Error(
+        `Research exceeded 180 seconds using ${runtime.model}. Retry once, or choose a faster model in AI & Models.`,
+      );
+    }
+    throw error;
+  }
+
   const body = await response.text();
   if (!response.ok) {
     let message = `OpenRouter returned HTTP ${response.status}.`;
@@ -47,6 +69,7 @@ async function openRouterResearch<T>(orgId: string, system: string, user: string
     if (response.status === 429) message = "OpenRouter rate-limited this research request. Retry shortly.";
     throw new Error(message);
   }
+
   const json = JSON.parse(body) as any;
   const content = json.choices?.[0]?.message?.content;
   if (!content) throw new Error("OpenRouter returned no research content.");
