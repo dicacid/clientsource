@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { executeDbRequest, executeRpc, signIn, signUp, userById, type DbRequest } from "./state.server";
 import { requireRenderUser } from "./auth-middleware";
+import { clearSessionCookie, setSessionCookie } from "./session.server";
 
 const authSchema = z.discriminatedUnion("action", [
   z.object({
@@ -15,13 +16,22 @@ const authSchema = z.discriminatedUnion("action", [
     email: z.string().email(),
     password: z.string().min(1),
   }),
+  z.object({
+    action: z.literal("signout"),
+  }),
 ]);
 
 export const authRequest = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => authSchema.parse(data))
   .handler(async ({ data }) => {
     if (data.action === "signup") return signUp(data.email, data.password, data.fullName);
-    return signIn(data.email, data.password);
+    if (data.action === "signout") {
+      clearSessionCookie();
+      return { ok: true };
+    }
+    const result = await signIn(data.email, data.password);
+    setSessionCookie(result.access_token);
+    return result;
   });
 
 export const currentUserRequest = createServerFn({ method: "GET" })
