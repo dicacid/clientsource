@@ -137,6 +137,9 @@ export type CompetitorRecord = {
   whyCompetitor: string;
   overlapAreas: string[];
   sourceUrls: string[];
+  positioning?: string;
+  moatPreview?: string[];
+  watchSignals?: string[];
   discoveredAt: string;
   updatedAt: string;
   lastAnalysedAt: string | null;
@@ -188,6 +191,9 @@ export async function mergeCompetitorDiscovery(
       existing.whyCompetitor = item.whyCompetitor;
       existing.overlapAreas = item.overlapAreas;
       existing.sourceUrls = [...new Set([...(existing.sourceUrls ?? []), ...item.sourceUrls])].slice(0, 12);
+      existing.positioning = item.positioning ?? existing.positioning;
+      existing.moatPreview = item.moatPreview ?? existing.moatPreview;
+      existing.watchSignals = item.watchSignals ?? existing.watchSignals;
       existing.updatedAt = now;
     } else {
       current.push({
