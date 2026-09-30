@@ -5,7 +5,7 @@ import { fetchPage, htmlToText, hostOf, rankedLinks } from "@/lib/prospect/web.s
 import { BUSINESS_CONTEXTS, capabilityText } from "./capabilities";
 import { diagnosePublicPage } from "./fetch-diagnostic.server";
 import { getAiRuntime } from "./openrouter.server";
-import { saveResearchRun } from "./store.server";
+import { getCapabilityProfile, saveResearchRun } from "./store.server";
 
 type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number | string };
 
@@ -121,7 +121,8 @@ export const researchSpaCompany = createServerFn({ method: "POST" })
     const domain = normalizeQueryDomain(data.query);
     const direct = await directWebsiteContext(domain);
     const profile = BUSINESS_CONTEXTS[data.businessContext];
-    const capabilityContext = (data.capabilityOverrides.trim() || capabilityText()).slice(0, 8000);
+    const storedCapabilityProfile = await getCapabilityProfile(context.organizationId);
+    const capabilityContext = (data.capabilityOverrides.trim() || storedCapabilityProfile || capabilityText()).slice(0, 8000);
     const directText = direct.pages.map((p) => `URL: ${p.url}\n${p.text}`).join("\n---\n").slice(0, 28000);
 
     type Result = {
@@ -233,7 +234,7 @@ Opportunity focus: ${data.focus}
 Business lens: ${profile.lens}
 
 SPA CAPABILITIES:
-${capabilityText()}
+${(await getCapabilityProfile(context.organizationId)) || capabilityText()}
 
 Return JSON {organisations:[...], signals:[...], tenders:[...], market_notes:[...]}.
 Find real current organisations/projects/signals relevant to this filter. For each signal explain SPA fit without asserting unverified equipment requirements. For tenders, include only documented notices with source URL and closing date when public.`;
