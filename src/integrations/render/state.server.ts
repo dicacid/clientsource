@@ -509,6 +509,8 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
         throw dbError("contacts still reference this company", "23503", "contacts");
       }
     }
+    const companyIds = new Set((candidates as Company[]).map((company) => company.id));
+    state.activities = state.activities.filter((activity) => !companyIds.has(activity.company_id));
   }
 
   if (table === "contacts") {
@@ -527,6 +529,19 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
 
 export async function executeDbRequest(userId: string, request: DbRequest): Promise<DbResult> {
   try {
+    const allowedTables = new Set([
+      "profiles",
+      "organizations",
+      "organization_members",
+      "pending_invites",
+      "companies",
+      "contacts",
+      "activities",
+    ]);
+    const allowedActions = new Set(["select", "insert", "update", "delete"]);
+    if (!allowedTables.has(String(request.table)) || !allowedActions.has(String(request.action))) {
+      throw dbError("Invalid data request.", "400");
+    }
     if (request.action === "select") {
       const state = await readState();
       const scoped = scopedRows(state, request.table, userId);
