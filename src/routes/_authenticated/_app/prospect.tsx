@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
 import { SPA_CAPABILITIES } from "@/lib/spa/capabilities";
 import { researchSpaCompany } from "@/lib/spa/research.functions";
+import { addApprovalItem } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/prospect")({
   head: () => ({
@@ -25,6 +26,7 @@ function capabilitySeed() {
 
 function ProspectPage() {
   const research = useServerFn(researchSpaCompany);
+  const createApproval = useServerFn(addApprovalItem);
   const [query, setQuery] = useState("");
   const [businessContext, setBusinessContext] = useState<"spa" | "solaronline" | "elmofo">("spa");
   const [capabilities, setCapabilities] = useState(capabilitySeed);
@@ -32,6 +34,7 @@ function ProspectPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [approvalMessage, setApprovalMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const prefill = localStorage.getItem("spa-intelligence.prospect.prefill");
@@ -46,6 +49,16 @@ function ProspectPage() {
     adjacent: SPA_CAPABILITIES.filter((c) => c.confidence === "LIKELY / ADJACENT").length,
     verify: SPA_CAPABILITIES.filter((c) => c.confidence === "NEEDS VERIFICATION").length,
   }), []);
+
+  async function sendToApproval() {
+    if (!result?.dossier?.organisation) return;
+    try {
+      await createApproval({ data: { title: result.dossier.organisation, kind: "prospect", payload: result } });
+      setApprovalMessage("Added to Approval Queue.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function run(e?: FormEvent) {
     e?.preventDefault();
@@ -149,7 +162,15 @@ function ProspectPage() {
         </div>
       )}
 
-      {result ? <IntelligenceResult result={result} /> : !busy && !error && (
+      {result ? (
+        <>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border border-border bg-card p-3 print:hidden">
+            <div><div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Manual approval point</div><p className="mt-1 text-sm">Research is prepared. Brett decides whether this proceeds.</p></div>
+            <Button onClick={sendToApproval} disabled={!!approvalMessage}>{approvalMessage || "Create approval item"}</Button>
+          </div>
+          <IntelligenceResult result={result} />
+        </>
+      ) : !busy && !error && (
         <div className="mt-8 grid min-h-48 place-items-center border border-dashed border-border p-8 text-center">
           <div>
             <div className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">No dossier loaded</div>
