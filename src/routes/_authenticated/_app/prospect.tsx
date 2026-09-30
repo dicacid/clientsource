@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,14 @@ function ProspectPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prefill = localStorage.getItem("spa-intelligence.prospect.prefill");
+    if (prefill) {
+      setQuery(prefill);
+      localStorage.removeItem("spa-intelligence.prospect.prefill");
+    }
+  }, []);
 
   const capabilityCounts = useMemo(() => ({
     confirmed: SPA_CAPABILITIES.filter((c) => c.confidence === "CONFIRMED").length,
