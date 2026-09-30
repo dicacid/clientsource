@@ -108,7 +108,7 @@ function Members() {
           <h2 className="text-sm font-semibold">Invite someone</h2>
           <Alert className="my-3">
             <AlertDescription>
-              No email is sent. Tell the person to sign up with this exact email address and confirm it. They'll join the workspace on their first sign-in.
+              No email is sent. Tell the person to sign up with this exact email address. They'll join the workspace on their first sign-in.
             </AlertDescription>
           </Alert>
           <form onSubmit={invite} className="flex flex-wrap gap-2">
