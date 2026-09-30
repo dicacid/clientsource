@@ -699,6 +699,14 @@ Rules:
     );
     const allowedDiscoverySources = new Set(rawCandidates.map((x) => x.source_url).filter(Boolean));
     const allowedSignalSources = new Set(externalSignals.map((x) => x.source_url).filter(Boolean));
+    const allowedOrgHosts = new Set(
+      verifiedOrgs.flatMap((x) => [x.website, ...x.directPages.map((p) => p.url)])
+        .map((url) => url ? hostOf(url) : null)
+        .filter(Boolean) as string[],
+    );
+    const allowedDiscoveryHosts = new Set(
+      rawCandidates.map((x) => hostOf(x.source_url)).filter(Boolean) as string[],
+    );
 
     const organisations = (synthesis.organisations ?? [])
       .map((x) => ({
@@ -706,14 +714,25 @@ Rules:
         location: cleanLocation(x.location),
         source_url: String(x.source_url ?? ""),
       }))
-      .filter((x) => x.name && x.website && x.location && (allowedWebsites.has(x.source_url) || allowedDiscoverySources.has(x.source_url)))
+      .filter((x) => {
+        const sourceHost = hostOf(x.source_url);
+        const websiteHost = x.website ? hostOf(x.website) : null;
+        return !!x.name && !!x.website && !!x.location && !!websiteHost && allowedOrgHosts.has(websiteHost) &&
+          (allowedWebsites.has(x.source_url) || allowedDiscoverySources.has(x.source_url) || (!!sourceHost && (allowedOrgHosts.has(sourceHost) || allowedDiscoveryHosts.has(sourceHost))));
+      })
       .slice(0, 10);
 
     const signals = (synthesis.signals ?? [])
       .map((x) => ({ ...x, location: cleanLocation(x.location), source_url: String(x.source_url ?? "") }))
-      .filter((x) => x.organisation && x.signal && x.location && x.source_url && (
-        allowedSignalSources.has(x.source_url) || allowedWebsites.has(x.source_url) || allowedDiscoverySources.has(x.source_url)
-      ))
+      .filter((x) => {
+        const sourceHost = hostOf(x.source_url);
+        return !!x.organisation && !!x.signal && !!x.location && !!x.source_url && (
+          allowedSignalSources.has(x.source_url) ||
+          allowedWebsites.has(x.source_url) ||
+          allowedDiscoverySources.has(x.source_url) ||
+          (!!sourceHost && (allowedOrgHosts.has(sourceHost) || allowedDiscoveryHosts.has(sourceHost)))
+        );
+      })
       .slice(0, 12);
 
     const tenders = (discovery.data.tenders ?? [])
