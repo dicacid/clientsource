@@ -108,6 +108,59 @@ function ProspectPage() {
 
   const sender = { name: name.trim(), email: email.trim() };
 
+  async function persistDossier(target: Target, result: ContactResult, senderWebsite: string) {
+    const now = new Date().toISOString();
+    const base = {
+      company_name: target.name,
+      sender_website: senderWebsite,
+      industry: target.industry || null,
+      country: target.country || null,
+      employee_range: target.employee_range || null,
+      why_fit: target.why_fit || null,
+      opportunity_score: result.opportunity_score,
+      qualification_summary: result.qualification_summary,
+      contact_name: result.contact_name,
+      contact_title: result.contact_title,
+      contact_email: result.email,
+      email_type: result.email_type,
+      source_url: result.source_url,
+      evidence_map: result.evidence_map,
+      trigger_signals: result.trigger_signals,
+      outreach_sequence: result.outreach_sequence,
+      subject: result.subject,
+      body: result.body,
+      last_researched_at: now,
+      updated_at: now,
+    };
+    const { data: existing, error: readError } = await renderDb
+      .from("prospect_dossiers")
+      .select("id")
+      .eq("organization_id", ws.organizationId)
+      .eq("domain", target.domain)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (existing?.id) {
+      const { error } = await renderDb.from("prospect_dossiers").update(base).eq("id", existing.id);
+      if (error) throw new Error(error.message);
+      return existing.id as string;
+    }
+    const { data, error } = await renderDb
+      .from("prospect_dossiers")
+      .insert({
+        organization_id: ws.organizationId,
+        domain: target.domain,
+        ...base,
+        stage: "researched",
+        outcome: "unknown",
+        company_id: null,
+        contact_id: null,
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+    return data.id as string;
+  }
+
   async function runResearch(targets: Target[], a: { website: string; analysis: Analysis }) {
     const id = runId.current;
     setPhase("researching");
@@ -120,6 +173,7 @@ function ProspectPage() {
         try {
           const result = await research({ data: { target: targets[i]!, analysis: a.analysis, website: a.website, sender, approved_claims: claims } });
           if (id !== runId.current) return;
+          await persistDossier(targets[i]!, result, a.website);
           setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "done", result } : x)));
         } catch (e) {
           setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "error", error: (e as Error).message } : x)));
@@ -187,6 +241,7 @@ function ProspectPage() {
           setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "working" } : x)));
           try {
             const result = await research({ data: { target: t, analysis: analysis.analysis, website: analysis.website, sender, approved_claims: claims } });
+            await persistDossier(t, result, analysis.website);
             setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "done", result } : x)));
           } catch (e) {
             setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "error", error: (e as Error).message } : x)));
@@ -207,6 +262,7 @@ function ProspectPage() {
     setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "working", error: undefined } : x)));
     try {
       const result = await research({ data: { target: t, analysis: analysis.analysis, website: analysis.website, sender, approved_claims: claims } });
+      await persistDossier(t, result, analysis.website);
       setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "done", result } : x)));
     } catch (e) {
       setRows((r) => r.map((x, j) => (j === i ? { ...x, state: "error", error: (e as Error).message } : x)));
@@ -214,7 +270,11 @@ function ProspectPage() {
   }
 
   function updateDraft(i: number, patch: Partial<ContactResult>) {
-    setRows((r) => r.map((x, j) => (j === i && x.result ? { ...x, result: { ...x.result, ...patch } } : x)));
+    const current = rows[i];
+    if (!current?.result) return;
+    const next = { ...current.result, ...patch };
+    setRows((r) => r.map((x, j) => (j === i ? { ...x, result: next } : x)));
+    void persistDossier(current, next, analysis?.website ?? normalizeWebsite(website) ?? website).catch(() => undefined);
   }
 
   async function save(i: number) {
@@ -271,6 +331,11 @@ function ProspectPage() {
       created_by: ws.userId,
     });
     if (error) return toast.error(friendlyError(error));
+    await renderDb
+      .from("prospect_dossiers")
+      .update({ stage: "crm", company_id: companyId, contact_id: contactId, updated_at: new Date().toISOString() })
+      .eq("organization_id", ws.organizationId)
+      .eq("domain", row.domain);
     setRows((r) => r.map((x, j) => (j === i ? { ...x, saved: true } : x)));
     qc.invalidateQueries();
     toast.success(`${row.name} saved to your CRM`);
@@ -401,7 +466,7 @@ function ProspectPage() {
       )}
 
       <p className="mt-8 text-xs text-muted-foreground">
-        Companies are suggested by AI and checked to have a live website. Contacts and emails come only from each company's public web pages. Nothing is
+        Companies are suggested by AI and checked to have a live website. Research is saved into a persistent prospect dossier so evidence, triggers and follow-up drafts are not lost. Contacts and emails come only from each company's public web pages. Nothing is
         sent from this app — review each email and send it from your own mail app. Follow local rules for cold outreach (e.g. GDPR/CAN-SPAM) and honor
         opt-out replies.
       </p>
@@ -594,6 +659,22 @@ function ProspectCard({
             )}
           </div>
           <PainMap items={res.evidence_map ?? []} pages={res.pages_read?.length ?? 0} />
+          {(res.outreach_sequence?.length ?? 0) > 0 && (
+            <details className="rounded-md border bg-background/40 p-3">
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Follow-up sequence · {res.outreach_sequence.length} drafts
+              </summary>
+              <div className="mt-3 space-y-3">
+                {res.outreach_sequence.map((step) => (
+                  <div key={step.step} className="rounded-md bg-muted/50 p-3">
+                    <div className="text-xs font-medium">Step {step.step} · day {step.delay_days} · {step.angle || "alternate grounded angle"}</div>
+                    <div className="mt-1 text-sm font-medium">{step.subject}</div>
+                    <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{step.body}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
           <Input value={res.subject} onChange={(e) => onChange({ subject: e.target.value })} aria-label="Subject" className="font-medium" />
           <Textarea value={res.body} onChange={(e) => onChange({ body: e.target.value })} rows={9} aria-label="Email body" className="text-sm" />
           <div className="flex flex-wrap gap-2">

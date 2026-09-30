@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireRenderMember } from "@/integrations/render/auth-middleware";
+import { prospectFeedbackForOrganization } from "@/integrations/render/state.server";
 import { aiJson, AiError } from "./ai.server";
 import { extractEmails, extractLinks, fetchPage, fetchText, hostOf, htmlToText, pageMeta, rankedLinks } from "./web.server";
 
@@ -54,6 +55,14 @@ export type OpportunitySignal = {
   confidence: "high" | "medium" | "low";
 };
 
+export type OutreachStep = {
+  step: number;
+  delay_days: number;
+  angle: string;
+  subject: string;
+  body: string;
+};
+
 export type ContactResult = {
   opportunity_score: number;
   qualification_summary: string;
@@ -66,6 +75,7 @@ export type ContactResult = {
   emails_found: string[];
   pages_read: string[];
   evidence_map: EvidenceItem[];
+  outreach_sequence: OutreachStep[];
   subject: string;
   body: string;
 };
@@ -165,6 +175,11 @@ export const discoverTargets = createServerFn({ method: "POST" })
   .handler(({ data, context }) =>
     wrap(async () => {
       await assertMember(context);
+      const feedback = await prospectFeedbackForOrganization(context.organizationId);
+      const feedbackHint =
+        feedback.samples >= 3
+          ? `\nWorkspace outcome feedback (use only as a tie-breaker after product fit): positive industries: ${feedback.positiveIndustries.join(", ") || "none"}; positive company sizes: ${feedback.positiveEmployeeRanges.join(", ") || "none"}; repeatedly not-relevant industries: ${feedback.negativeIndustries.join(", ") || "none"}.`
+          : "";
       // Only the sender's own domain and domains already seen in this run are excluded.
       const skip = new Set<string>([hostOf(data.website) ?? "", ...data.exclude.map((d) => hostOf(d) ?? d)]);
       const AU_RE = /australia|sydney|melbourne|brisbane|perth|adelaide|gold coast|canberra|hobart|darwin/i;
@@ -178,7 +193,7 @@ export const discoverTargets = createServerFn({ method: "POST" })
       const an = data.analysis;
       const res = await aiJson<{ companies: Target[] }>(
         `You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Derive the target market ONLY from the product analysis given (its ideal customers, industries and buyer titles); do not assume any other vertical. Only include companies you are confident exist, with their real primary website domain. ${locationRule}`,
-        `Product: ${an.business_name}: ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nIdeal customers: ${an.ideal_customers.join("; ")}\nTarget industries: ${an.target_industries.join(", ")}\nBuyer titles: ${an.target_titles.join(", ")}\nPain points: ${an.pain_points.join("; ")}\nDifferentiators: ${an.differentiators.join("; ") || "(none)"}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
+        `Product: ${an.business_name}: ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nIdeal customers: ${an.ideal_customers.join("; ")}\nTarget industries: ${an.target_industries.join(", ")}\nBuyer titles: ${an.target_titles.join(", ")}\nPain points: ${an.pain_points.join("; ")}\nDifferentiators: ${an.differentiators.join("; ") || "(none)"}${feedbackHint}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
       );
       const candidates = (res.companies ?? [])
         .map((c) => ({ ...c, domain: hostOf(String(c.domain ?? "")) ?? "" }))
@@ -249,7 +264,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const nonLive = an.capability_status.filter((c) => c.status !== "live").map((c) => c.capability).filter((c) => c.length >= 4);
       const senderEvidence = [an.value_proposition, an.what_it_does, ...an.pricing_summary, ...an.differentiators, ...an.proof_points, ...an.capability_status.map((c) => `${c.capability} ${c.evidence}`)].join(" ").toLowerCase();
 
-      type Draft = { contact_name: string | null; contact_title: string | null; email: string | null; source_url: string | null; evidence_map: (EvidenceItem & { selected?: boolean })[]; trigger_signals?: OpportunitySignal[]; qualification_summary?: string; subject: string; body: string };
+      type Draft = { contact_name: string | null; contact_title: string | null; email: string | null; source_url: string | null; evidence_map: (EvidenceItem & { selected?: boolean })[]; trigger_signals?: OpportunitySignal[]; qualification_summary?: string; outreach_sequence?: OutreachStep[]; subject: string; body: string };
       const system =
         "You research B2B prospects and write short, specific, pain-first cold outreach emails. Use ONLY facts present in the provided page text, except any explicitly labelled operator-approved sender claims. Never invent people, email addresses, prices, offers, capabilities or problems. Never assume a problem merely because the industry commonly has it. Every inference must follow from an observed fact on their site.";
       const adoptionInstruction = approved
@@ -257,7 +272,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         : "";
       const prompt = `Target company: ${data.target.name} (${domain}), ${data.target.industry}, ${data.target.country}\nWhy they fit (AI guess, unverified): ${data.target.why_fit}\n\nPreferred decision-maker titles: ${an.target_titles.join(", ")}\n\nEmails found on their public site: ${emails.join(", ") || "none"}\n\nTheir public pages:\n${corpus || "(site text unavailable)"}\n\n---\nSENDER (commercial facts below are verified from the sender's own site, except explicitly labelled operator-approved campaign claims)\nSender: ${data.sender.name} <${data.sender.email}>\nProduct: ${an.business_name} (${data.website}): ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nPain points solved: ${an.pain_points.join("; ")}\nDifferentiators / moat: ${an.differentiators.join("; ") || "(none stated)"}\nPricing (verified): ${an.pricing_summary.join("; ") || "(none found, so make NO pricing, free, trial, credit-card or plan claims)"}\nProof points (verified): ${an.proof_points.join("; ") || "(none found)"}\nCapabilities with status:\n- ${caps}\n${adoptionInstruction}\nTasks:\n1. Build evidence_map (3-6 items) BEFORE writing. Each item: observed_fact (literally on their pages), source_url (exact page URL above), likely_operational_friction, classification ("FACT" if the friction itself is stated on the page, else "INFERENCE" that follows directly from the observed_fact), consequence (practical cost in their terms), role_relevance, matched_sender_capability (only from the sender capabilities list, or "none"), capability_status (that capability's status, "unclear" if none), confidence ("high"|"medium"|"low"), selected (true for the 2-3 items you will use in the email; 4 only if evidence is unusually strong). Rank for selection by: operational cost/frustration, recurrence, relevance to the chosen contact, evidence confidence, strength of sender match. Only select items whose matched capability is live. Skip anything you can't ground in the page text.\n2. Identify trigger_signals (0-5) that make outreach timely. A trigger must be an explicit current/recent fact in the supplied target pages, such as a new project, expansion, hiring, launch, contract, event, location, service or operational change. Each item: signal, source_url (exact supplied URL), why_now, confidence. Do not invent dates or recency. If there is no genuine trigger, return [].
 3. Write qualification_summary in 1-2 sentences explaining why this prospect merits attention, grounded only in the evidence map and trigger signals. Do not include a numeric score.
-4. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n5. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n6. source_url: page URL where the person or email appeared, or null.\n7. Write the email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approved ? " Include the operator-approved sender assertions after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free offers/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approved ? " EXCEPTION: statements explicitly contained in the operator-approved sender assertions above may be used." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, trigger_signals, qualification_summary, subject, body.`;
+4. Pick the best decision-maker named in the page text (prefer the titles above; founders/owners/CEOs fine for small firms). If none named, contact_name and contact_title are null.\n5. Pick the best email ONLY from the "Emails found" list (personal address for that person if present, else the most relevant general inbox). If empty, null.\n6. source_url: page URL where the person or email appeared, or null.\n7. Write the initial email. Subject: max 8 words, specific to this prospect. Body: roughly 140-200 words, plain text, human, direct, not SaaS boilerplate. Greet by first name if known, else "Hi ${data.target.name} team". Open with ONE concrete observation from their site. Then surface the 2-3 selected recurring friction points, the practical consequence of each in their terms, and connect each to a specific live sender capability, favouring differentiators/moat over generic CRM plumbing. INFERENCE items must be worded tentatively ("I'd guess", "often means", "I imagine") and never stated as known fact. Pricing/proof points only if genuinely useful as supporting evidence, never the hook, and only exactly as verified above.${approved ? " Include the operator-approved sender assertions after those pains and before the CTA." : ""}\nSTRICT RULES:\n- Any claim about price, free offers/trials, no credit card, no personal details, onboarding speed, plans or capacity MUST appear in the verified sender facts above; otherwise omit it.${approved ? " EXCEPTION: statements explicitly contained in the operator-approved sender assertions above may be used." : ""}\n- Never present a capability with status preview, planned or unclear as available${nonLive.length ? ` (these are NOT live: ${nonLive.join(", ")})` : ""}.\n- No generic phrases like "streamline your workflow", "all-in-one solution", "everything in one platform".\n- NEVER offer or mention a call, phone call, demo, Zoom or meeting. The ONLY call to action is to reply to this email or check out ${data.website}.\n- Do NOT use em dashes or en dashes anywhere. Use commas, full stops or colons.\n- Sign off with the sender's name and website, then a final line: "If this isn't relevant, just reply and I won't follow up." No bracket placeholders.\n8. Create outreach_sequence with exactly two optional follow-up drafts for human review: step 2 at delay_days 3 and step 3 at delay_days 7. Each must use a different grounded evidence item or trigger from this dossier, add no new factual claims, avoid "just following up", stay under 120 words, and use only a reply or ${data.website} as the CTA. Fields: step, delay_days, angle, subject, body.\n\nReturn JSON with keys: contact_name, contact_title, email, source_url, evidence_map, trigger_signals, qualification_summary, outreach_sequence, subject, body.`;
 
       let r = await aiJson<Draft>(system, prompt, "medium");
       const hasNonLive = (t: string) => nonLive.filter((c) => t.toLowerCase().includes(c.toLowerCase()));
@@ -340,6 +355,21 @@ export const researchAndDraft = createServerFn({ method: "POST" })
       const subject = noDash(namesThisTarget(String(r.subject ?? ""))
         ? String(r.subject)
         : `${data.target.name}: ${(evidence_map.find((e) => e.selected && e.capability_status === "live")?.matched_sender_capability || "operations").split(/\s+/).slice(0, 5).join(" ")}`);
+      const cleanSequenceBody = (value: unknown) =>
+        sentences(noDash(String(value ?? "")), (x) => {
+          if (hasNonLive(x).length) return false;
+          return CLAIMS.every(([inText, inEvidence]) => !inText.test(x) || inEvidence.test(senderEvidence) || inEvidence.test(approvedLower));
+        }).slice(0, 2500);
+      const outreach_sequence: OutreachStep[] = (Array.isArray(r.outreach_sequence) ? r.outreach_sequence : [])
+        .slice(0, 2)
+        .map((s, index) => ({
+          step: index + 2,
+          delay_days: index === 0 ? 3 : 7,
+          angle: String(s?.angle ?? "").slice(0, 200),
+          subject: noDash(String(s?.subject ?? "")).slice(0, 200),
+          body: cleanSequenceBody(s?.body),
+        }))
+        .filter((s) => s.subject && s.body);
       const lowerCorpus = corpus.toLowerCase();
       const email = r.email && emails.includes(r.email.toLowerCase()) ? r.email.toLowerCase() : emails.find((e) => e.endsWith(domain)) ?? null;
       const name = r.contact_name && lowerCorpus.includes(r.contact_name.toLowerCase().split(" ").pop() ?? "~~") ? r.contact_name.slice(0, 120) : null;
@@ -356,6 +386,7 @@ export const researchAndDraft = createServerFn({ method: "POST" })
         emails_found: emails,
         pages_read: uniq.map((p) => p.url),
         evidence_map,
+        outreach_sequence,
         subject: subject.slice(0, 200),
         body: body.slice(0, 4000),
       };

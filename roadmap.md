@@ -10,6 +10,9 @@
 - [x] Optional OpenRouter-assisted discovery and drafting
 - [x] Australia / international / both targeting
 - [x] Render-compatible Node deployment and health probe
+- [x] Persistent prospect intelligence dossiers with evidence and timing signals
+- [x] Multi-step follow-up draft sequences
+- [x] Outcome capture with lightweight targeting feedback
 
 ## High priority
 
@@ -29,3 +32,4 @@
 - [ ] Accessibility and keyboard improvements
 - [ ] AI provider adapters
 - [ ] State-schema migration framework
+- [ ] Rich relationship graph across contacts, referrals and related organisations

@@ -47,6 +47,37 @@ type Activity = {
   created_at: string;
 };
 
+type ProspectDossier = {
+  id: string;
+  organization_id: string;
+  domain: string;
+  company_name: string;
+  sender_website: string;
+  industry: string | null;
+  country: string | null;
+  employee_range: string | null;
+  why_fit: string | null;
+  opportunity_score: number;
+  qualification_summary: string;
+  contact_name: string | null;
+  contact_title: string | null;
+  contact_email: string | null;
+  email_type: string;
+  source_url: string | null;
+  evidence_map: unknown[];
+  trigger_signals: unknown[];
+  outreach_sequence: unknown[];
+  subject: string;
+  body: string;
+  stage: string;
+  outcome: string;
+  company_id: string | null;
+  contact_id: string | null;
+  last_researched_at: string;
+  updated_at: string;
+  created_at: string;
+};
+
 type State = {
   users: User[];
   profiles: Profile[];
@@ -56,6 +87,7 @@ type State = {
   companies: Company[];
   contacts: Contact[];
   activities: Activity[];
+  prospect_dossiers: ProspectDossier[];
 };
 
 type Filter = {
@@ -68,7 +100,7 @@ type Filter = {
 type Order = { column: string; ascending: boolean; nullsFirst?: boolean };
 
 export type DbRequest = {
-  table: keyof Pick<State, "profiles" | "organizations" | "organization_members" | "pending_invites" | "companies" | "contacts" | "activities">;
+  table: keyof Pick<State, "profiles" | "organizations" | "organization_members" | "pending_invites" | "companies" | "contacts" | "activities" | "prospect_dossiers">;
   action: "select" | "insert" | "update" | "delete";
   payload?: unknown;
   filters?: Filter[];
@@ -101,6 +133,7 @@ function emptyState(): State {
     companies: [],
     contacts: [],
     activities: [],
+    prospect_dossiers: [],
   };
 }
 
@@ -403,6 +436,30 @@ function withDefaults(table: DbRequest["table"], input: any, userId: string) {
     row.contact_id ??= null;
     row.created_by = userId;
   }
+  if (table === "prospect_dossiers") {
+    row.industry ??= null;
+    row.country ??= null;
+    row.employee_range ??= null;
+    row.why_fit ??= null;
+    row.contact_name ??= null;
+    row.contact_title ??= null;
+    row.contact_email ??= null;
+    row.email_type ??= "none";
+    row.source_url ??= null;
+    row.evidence_map = Array.isArray(row.evidence_map) ? row.evidence_map : [];
+    row.trigger_signals = Array.isArray(row.trigger_signals) ? row.trigger_signals : [];
+    row.outreach_sequence = Array.isArray(row.outreach_sequence) ? row.outreach_sequence : [];
+    row.opportunity_score = Number.isFinite(Number(row.opportunity_score)) ? Math.max(0, Math.min(100, Number(row.opportunity_score))) : 0;
+    row.qualification_summary ??= "";
+    row.subject ??= "";
+    row.body ??= "";
+    row.stage ??= "researched";
+    row.outcome ??= "unknown";
+    row.company_id ??= null;
+    row.contact_id ??= null;
+    row.last_researched_at ??= now;
+    row.updated_at ??= now;
+  }
   return row;
 }
 
@@ -438,6 +495,14 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
         if (!company) throw dbError("activities company reference is invalid", "23503");
         if (row.contact_id && !state.contacts.some((c) => c.id === row.contact_id && c.organization_id === actor.organization_id)) {
           throw dbError("activities contact reference is invalid", "23503");
+        }
+      }
+      if (table === "prospect_dossiers") {
+        row.domain = String(row.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
+        if (!row.domain || !row.domain.includes(".")) throw dbError("prospect dossier domain is invalid", "400");
+        row.sender_website = normalizeWebsite(row.sender_website) ?? String(row.sender_website ?? "");
+        if (state.prospect_dossiers.some((d) => d.organization_id === actor.organization_id && d.domain === row.domain)) {
+          throw dbError("prospect dossier already exists", "23505");
         }
       }
     }
@@ -537,6 +602,7 @@ export async function executeDbRequest(userId: string, request: DbRequest): Prom
       "companies",
       "contacts",
       "activities",
+      "prospect_dossiers",
     ]);
     const allowedActions = new Set(["select", "insert", "update", "delete"]);
     if (!allowedTables.has(String(request.table)) || !allowedActions.has(String(request.action))) {
@@ -645,6 +711,32 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
   }
 }
 
+
+export async function prospectFeedbackForOrganization(organizationId: string) {
+  const state = await readState();
+  const rows = state.prospect_dossiers.filter((d) => d.organization_id === organizationId && d.outcome !== "unknown");
+  const positives = rows.filter((d) => ["replied", "interested", "customer"].includes(d.outcome));
+  const negatives = rows.filter((d) => d.outcome === "not_relevant");
+
+  const top = (items: ProspectDossier[], key: "industry" | "employee_range") => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const value = item[key]?.trim();
+      if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([value]) => value);
+  };
+
+  return {
+    samples: rows.length,
+    positiveIndustries: top(positives, "industry"),
+    positiveEmployeeRanges: top(positives, "employee_range"),
+    negativeIndustries: top(negatives, "industry"),
+  };
+}
 
 export async function datastoreHealth() {
   const r = await redis();
