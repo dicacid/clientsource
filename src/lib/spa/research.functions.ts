@@ -5,6 +5,7 @@ import { fetchPage, htmlToText, hostOf, rankedLinks } from "@/lib/prospect/web.s
 import { BUSINESS_CONTEXTS, capabilityText } from "./capabilities";
 import { diagnosePublicPage } from "./fetch-diagnostic.server";
 import { getAiRuntime } from "./openrouter.server";
+import { saveResearchRun } from "./store.server";
 
 type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number | string };
 
@@ -187,7 +188,7 @@ Rules:
 - Prefer Australian/current sources where relevant, but do not exclude authoritative global company sources.`;
 
     const result = await openRouterResearch<Result>(context.organizationId, system, prompt);
-    return {
+    const response = {
       query: data.query,
       businessContext: data.businessContext,
       mode: data.mode,
@@ -197,6 +198,16 @@ Rules:
       usage: result.usage,
       researchedAt: new Date().toISOString(),
     };
+    await saveResearchRun(context.organizationId, {
+      query: data.query,
+      researchType: data.mode,
+      businessContext: data.businessContext,
+      researchedAt: response.researchedAt,
+      modelUsed: result.modelUsed,
+      status: direct.status === "ok" ? "completed" : "partial",
+      result: response,
+    });
+    return response;
   });
 
 export const researchSpaIndustry = createServerFn({ method: "POST" })
@@ -227,5 +238,15 @@ ${capabilityText()}
 Return JSON {organisations:[...], signals:[...], tenders:[...], market_notes:[...]}.
 Find real current organisations/projects/signals relevant to this filter. For each signal explain SPA fit without asserting unverified equipment requirements. For tenders, include only documented notices with source URL and closing date when public.`;
     const result = await openRouterResearch<Result>(context.organizationId, system, prompt);
-    return { ...result.data, modelUsed: result.modelUsed, usage: result.usage, researchedAt: new Date().toISOString() };
+    const response = { ...result.data, modelUsed: result.modelUsed, usage: result.usage, researchedAt: new Date().toISOString() };
+    await saveResearchRun(context.organizationId, {
+      query: `${data.industry} · ${data.region} · ${data.focus}`,
+      researchType: "industry",
+      businessContext: data.businessContext,
+      researchedAt: response.researchedAt,
+      modelUsed: result.modelUsed,
+      status: "completed",
+      result: response,
+    });
+    return response;
   });
