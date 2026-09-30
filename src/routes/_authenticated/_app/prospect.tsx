@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Check, Copy, ExternalLink, Loader2, Mail, Plus, RefreshCw, Sparkles } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,7 +101,7 @@ function ProspectPage() {
     } catch {
       /* ignore */
     }
-    supabase
+    renderDb
       .from("profiles")
       .select("full_name")
       .eq("id", ws.userId)
@@ -226,11 +226,11 @@ function ProspectPage() {
     const site = normalizeWebsite(row.domain);
     let companyId: string | null = null;
     if (site) {
-      const { data } = await supabase.from("companies").select("id").eq("organization_id", ws.organizationId).eq("website", site).maybeSingle();
+      const { data } = await renderDb.from("companies").select("id").eq("organization_id", ws.organizationId).eq("website", site).maybeSingle();
       companyId = data?.id ?? null;
     }
     if (!companyId) {
-      const { data, error } = await supabase
+      const { data, error } = await renderDb
         .from("companies")
         .insert({
           organization_id: ws.organizationId,
@@ -249,7 +249,7 @@ function ProspectPage() {
     }
     let contactId: string | null = null;
     if (res.contact_name || res.email) {
-      const { data, error } = await supabase
+      const { data, error } = await renderDb
         .from("contacts")
         .insert({
           organization_id: ws.organizationId,
@@ -265,7 +265,7 @@ function ProspectPage() {
       if (error) return toast.error(friendlyError(error));
       contactId = data.id;
     }
-    const { error } = await supabase.from("activities").insert({
+    const { error } = await renderDb.from("activities").insert({
       organization_id: ws.organizationId,
       company_id: companyId,
       contact_id: contactId,
