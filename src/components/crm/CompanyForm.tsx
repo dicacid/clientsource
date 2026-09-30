@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,8 +79,8 @@ export function CompanyForm({
     };
     setBusy(true);
     const { error } = company
-      ? await supabase.from("companies").update(payload).eq("id", company.id)
-      : await supabase.from("companies").insert({ ...payload, organization_id: ws.organizationId });
+      ? await renderDb.from("companies").update(payload).eq("id", company.id)
+      : await renderDb.from("companies").insert({ ...payload, organization_id: ws.organizationId });
     setBusy(false);
     if (error) return toast.error(friendlyError(error));
     toast.success(company ? "Company saved" : "Company added");
