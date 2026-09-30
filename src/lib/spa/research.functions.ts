@@ -208,6 +208,8 @@ Rules:
 - people entries require a source URL. contact may be null. Do not infer personal email patterns.
 - tenders only if actually found.
 - evidence classification must be one of OBSERVED_FACT, SOURCE_CLAIM, INFERENCE, COMMERCIAL_HYPOTHESIS, UNKNOWN.
+- LOCATION REQUIREMENT: actively search for the organisation's headquarters, office, facility, project or operating locations. Populate locations with concise real locations such as "Cardiff, NSW, Australia". Never output placeholder phrases such as "not supplied", "not stated", "unknown location", "N/A" or similar. If only country-level location is supported, use the country. Leave locations empty only when no public source supports any location.
+- Any location included must be supported by a source used in the evidence ledger.
 - Keep source URLs clickable and exact.
 - Prefer Australian/current sources where relevant, but do not exclude authoritative global company sources.`;
 
@@ -260,9 +262,42 @@ SPA CAPABILITIES:
 ${(await getCapabilityProfile(context.organizationId)) || capabilityText()}
 
 Return JSON {organisations:[...], signals:[...], tenders:[...], market_notes:[...]}.
-Find real current organisations/projects/signals relevant to this filter. For each signal explain SPA fit without asserting unverified equipment requirements. For tenders, include only documented notices with source URL and closing date when public.`;
+Find real current organisations/projects/signals relevant to this filter.
+
+LOCATION IS REQUIRED FOR RETURNED RESULTS:
+- Actively research and populate a real location for every organisation, signal and tender.
+- For an organisation, use its headquarters, office, facility or operating location relevant to the requested region.
+- For a project/signal, use the project/site location where available, otherwise the organisation location relevant to the signal.
+- For a tender, use the project/service/delivery location, or the issuer jurisdiction when that is the only supported geographic scope.
+- Use concise forms such as "Newcastle, NSW, Australia", "Pilbara, WA, Australia" or "Australia".
+- Never output placeholders such as "not supplied", "not stated", "unknown", "N/A" or an empty string.
+- If you cannot establish any supported location for an item from a public source, OMIT that item entirely.
+- The item's source_url must support both the item's existence and its stated location, or be the strongest available source with the location supported by another authoritative result used in the research.
+
+For each signal explain SPA fit without asserting unverified equipment requirements. For tenders, include only documented notices with source URL and closing date when public.`;
     const result = await openRouterResearch<Result>(context.organizationId, system, prompt);
-    const response = { ...result.data, modelUsed: result.modelUsed, usage: result.usage, researchedAt: new Date().toISOString() };
+
+    const cleanLocation = (value: unknown): string | null => {
+      const location = typeof value === "string" ? value.trim() : "";
+      if (!location) return null;
+      if (/^(?:not\s+(?:supplied|stated|provided|available|found)|unknown(?:\s+location)?|n\/?a|none|null)$/i.test(location)) return null;
+      return location.slice(0, 200);
+    };
+
+    const cleaned = {
+      ...result.data,
+      organisations: (result.data.organisations ?? [])
+        .map((item) => ({ ...item, location: cleanLocation(item.location) }))
+        .filter((item) => !!item.name && !!item.source_url && !!item.location),
+      signals: (result.data.signals ?? [])
+        .map((item) => ({ ...item, location: cleanLocation(item.location) }))
+        .filter((item) => !!item.organisation && !!item.signal && !!item.source_url && !!item.location),
+      tenders: (result.data.tenders ?? [])
+        .map((item) => ({ ...item, location: cleanLocation(item.location) }))
+        .filter((item) => !!item.title && !!item.issuer && !!item.source_url && !!item.location),
+    };
+
+    const response = { ...cleaned, modelUsed: result.modelUsed, usage: result.usage, researchedAt: new Date().toISOString() };
     await saveResearchRun(context.organizationId, {
       query: `${data.industry} · ${data.region} · ${data.focus}`,
       researchType: "industry",
