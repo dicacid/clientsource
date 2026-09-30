@@ -1,17 +1,19 @@
 <!-- LOVABLE:BEGIN -->
 > [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
->
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
+> This project is connected to Lovable. Avoid rewriting published Git history
+> while that connection is active unless you intentionally plan to reconnect it.
 <!-- LOVABLE:END -->
 
 ## Architecture rules
-- Single-org CRM: all tenancy enforced in Postgres (one_org_only index, RLS helpers, RPCs); client never inserts orgs/members — why: security must not rely on UI.
-- Protected pages live under src/routes/_authenticated/_app/ (membership gate); onboarding sits outside _app — why: first-run flow needs a session but no membership.
-- Website normalization rule exists twice (SQL normalize_website + src/lib/website.ts) and must stay identical — why: CSV matching and CHECK constraint.
-- Prospect finder: AI + public-site reading run only in server functions (src/lib/prospect/*.server.ts), gated by workspace membership; emails must come from scraped pages — why: no invented contacts, keys stay server-side.
-- Prospect engine is sender-agnostic: no sender-domain branching; operator-approved claims come in as approved_claims, stored per normalized sender domain in the browser; discovery excludes only the sender domain and this run's domains — why: one workspace serves many businesses without cross-contamination.
+
+- Do not add Supabase as a runtime dependency.
+- Persistent state and app-native auth live in `src/integrations/render/`. The folder name is historical; persistence is Redis-compatible.
+- Protected pages/functions must enforce auth and workspace membership on the server.
+- Passwords remain server-side and are stored only as salted scrypt hashes.
+- `SESSION_SECRET`, datastore credentials and AI keys must never reach browser bundles, route payloads or logs.
+- The state mutation queue is process-local. Do not claim horizontal-scaling safety without distributed concurrency control.
+- Prospect AI and public-site reads run only on the server and behind workspace membership.
+- Never invent contact names or email addresses.
+- Keep the prospect engine sender-agnostic. Do not hard-code a contributor's business or campaign into generic logic.
+- `src/routeTree.gen.ts` is generated. Do not edit it manually.
+- Treat outbound website fetching as security-sensitive and keep it bounded.

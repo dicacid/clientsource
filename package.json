@@ -1,5 +1,5 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "prospect-finder-b2b",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -89,5 +89,16 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "8.1.5"
-  }
+  },
+  "version": "0.1.0",
+  "description": "Self-hosted B2B prospecting CRM with public-web research and optional OpenRouter-assisted drafting.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dicacid/clientsource.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dicacid/clientsource/issues"
+  },
+  "homepage": "https://github.com/dicacid/clientsource#readme"
 }

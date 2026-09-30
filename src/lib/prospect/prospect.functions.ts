@@ -113,7 +113,7 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
     wrap(async () => {
       await assertMember(context);
       const host = hostOf(data.website);
-      if (!host) throw new Error("Enter a valid website like cadenceops.app");
+      if (!host) throw new Error("Enter a valid website like example.com");
       const home = (await fetchPage(`https://${host}`)) ?? (await fetchPage(`https://www.${host}`));
       if (!home) throw new Error(`Couldn't open https://${host}. Check the address and that the site is public.`);
       const meta = pageMeta(home.html);

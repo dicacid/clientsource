@@ -47,11 +47,8 @@ type Row = Target & {
 
 const STORE = "pipeline.prospect.sender";
 const CLAIMS_STORE = "pipeline.prospect.claims";
-// Sender-specific campaign data (not engine logic): claims the operator approved for cadenceops.app.
-const DEFAULT_CLAIMS: Record<string, string> = {
-  "cadenceops.app":
-    "No need to replace, migrate away from, or change existing workflow or tools to try CadenceOps.\nCadenceOps can run alongside the existing workflow in parallel.\nGetting started takes about five minutes.",
-};
+// The open-source build intentionally ships with no business-specific defaults.
+const DEFAULT_CLAIMS: Record<string, string> = {};
 const claimKey = (site: string) => normalizeWebsite(site)?.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] ?? "";
 function readClaims(): Record<string, string> {
   try {
