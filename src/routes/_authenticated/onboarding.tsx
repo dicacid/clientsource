@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
 });
 
-type State = "loading" | "unconfirmed" | "no_org" | "not_invited" | "error";
+type State = "loading" | "no_org" | "not_invited" | "error";
 
 function Onboarding() {
   const navigate = useNavigate();
@@ -72,12 +72,6 @@ function Onboarding() {
             <Skeleton className="h-7 w-2/3" />
             <Skeleton className="h-4 w-full" />
           </div>
-        )}
-        {state === "unconfirmed" && (
-          <>
-            <h1 className="mt-2 text-xl font-semibold">Confirm your email, then sign in again.</h1>
-            <p className="mt-2 text-sm text-muted-foreground">We can't continue until {user.email} is confirmed.</p>
-          </>
         )}
         {state === "no_org" && (
           <form onSubmit={create} className="mt-2 space-y-4">
