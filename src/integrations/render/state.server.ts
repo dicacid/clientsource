@@ -629,3 +629,15 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
     return { data: null, error: result.error };
   }
 }
+
+
+export async function datastoreHealth() {
+  const r = await redis();
+  const probeKey = "clientsource:health:" + randomUUID();
+  const probeValue = new Date().toISOString();
+  await r.set(probeKey, probeValue, { EX: 30 });
+  const readBack = await r.get(probeKey);
+  await r.del(probeKey);
+  if (readBack !== probeValue) throw new Error("Render datastore write/read verification failed.");
+  return { ok: true as const, datastore: "render-key-value" as const };
+}
