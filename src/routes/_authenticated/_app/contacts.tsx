@@ -30,7 +30,7 @@ function IndustryIntelligence() {
   }
 
   function convert(org: any) {
-    localStorage.setItem("spa-intelligence.prospect.prefill", org.website || org.name);
+    localStorage.setItem("spa-intelligence.prospect.prefill", JSON.stringify(org));
     navigate({ to: "/prospect" });
   }
 
