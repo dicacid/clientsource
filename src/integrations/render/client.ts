@@ -1,6 +1,6 @@
 import { authRequest, currentUserRequest, dbRequest, rpcRequest } from "./server.functions";
 
-const STORAGE_KEY = "clientsource.session";
+const STORAGE_KEY = "spa-intelligence.session";
 type AuthEvent = "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED";
 type Listener = (event: AuthEvent, session: { access_token: string } | null) => void;
 const listeners = new Set<Listener>();
