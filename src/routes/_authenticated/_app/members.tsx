@@ -1,209 +1,84 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
-import { renderDb } from "@/integrations/render/client";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useState } from "react";
+import { Check, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { EMAIL_RE, label, type Role } from "@/lib/constants";
-import { friendlyError } from "@/lib/errors";
-import { useWorkspace } from "@/lib/workspace";
-import { ConfirmDelete, OptionSelect, PageHeader } from "@/components/crm/shared";
+import { getApprovalItems, setApprovalState } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/members")({
-  head: () => ({
-    meta: [
-      { title: "Members — Prospect Finder B2B" },
-      { name: "description", content: "Workspace members, roles and pending invites." },
-      { property: "og:title", content: "Members — Prospect Finder B2B" },
-      { property: "og:description", content: "Workspace members, roles and pending invites." },
-    ],
-  }),
-  component: Members,
+  head: () => ({ meta: [{ title: "Approval Queue — SPA Intelligence" }] }),
+  component: ApprovalQueue,
 });
 
-function Members() {
-  const ws = useWorkspace();
-  const qc = useQueryClient();
-  const isOwner = ws.role === "owner";
-  const isAdmin = ws.role === "owner" || ws.role === "admin";
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>("member");
-  const [busy, setBusy] = useState(false);
+const STATES = [
+  "DETECTED","RESEARCHED","QUALIFIED","PREPARED","AWAITING APPROVAL","NEEDS CHANGES",
+  "APPROVED","ACTIONED","FOLLOW-UP DUE","WON","LOST","NO BID","ARCHIVED",
+] as const;
 
-  const q = useQuery({
-    queryKey: ["members", ws.organizationId],
-    queryFn: async () => {
-      const [m, inv] = await Promise.all([
-        renderDb.from("organization_members").select("user_id, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
-        renderDb.from("pending_invites").select("id, email, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
-      ]);
-      if (m.error) throw m.error;
-      if (inv.error) throw inv.error;
-      const ids = m.data.map((x) => x.user_id);
-      const { data: profs, error } = await renderDb.from("profiles").select("id, full_name").in("id", ids);
-      if (error) throw error;
-      const names = Object.fromEntries((profs ?? []).map((p) => [p.id, p.full_name]));
-      return { members: m.data.map((x) => ({ ...x, name: names[x.user_id] as string | null })), invites: inv.data };
-    },
-  });
+function ApprovalQueue() {
+  const getItems = useServerFn(getApprovalItems);
+  const setState = useServerFn(setApprovalState);
+  const [items, setItems] = useState<any[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ["members"] });
-  const ownerCount = q.data?.members.filter((m) => m.role === "owner").length ?? 0;
-
-  async function invite(e: FormEvent) {
-    e.preventDefault();
-    if (!EMAIL_RE.test(email.trim())) return toast.error("Enter a valid email.");
-    setBusy(true);
-    const { error } = await renderDb.from("pending_invites").insert({
-      organization_id: ws.organizationId,
-      email: email.trim().toLowerCase(),
-      role: isOwner ? role : "member",
-      invited_by: ws.userId,
-    });
-    setBusy(false);
-    if (error) return toast.error(friendlyError(error));
-    toast.success(`Invite saved for ${email.trim()}`);
-    setEmail("");
-    refresh();
+  async function refresh() {
+    try { setItems(await getItems()); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }
+  useEffect(() => { void refresh(); }, []);
 
-  async function removeInvite(id: string) {
-    const { error } = await renderDb.from("pending_invites").delete().eq("id", id);
-    if (error) return toast.error(friendlyError(error));
-    toast.success("Invite removed");
-    refresh();
+  async function change(id: string, state: typeof STATES[number]) {
+    setBusy(id); setError(null);
+    try {
+      await setState({ data: { id, state } });
+      setItems((rows) => rows.map((x) => x.id === id ? { ...x, state, updatedAt: new Date().toISOString() } : x));
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setBusy(null); }
   }
-
-  async function setMemberRole(userId: string, newRole: string) {
-    const { error } = await renderDb.rpc("set_member_role", { target_user_id: userId, new_role: newRole });
-    if (error) return toast.error(friendlyError(error));
-    toast.success("Role updated");
-    refresh();
-  }
-
-  async function removeMember(userId: string) {
-    const { error, count } = await renderDb
-      .from("organization_members")
-      .delete({ count: "exact" })
-      .eq("organization_id", ws.organizationId)
-      .eq("user_id", userId);
-    if (error) return toast.error(friendlyError(error));
-    if (!count) return toast.error("You don't have permission to remove this member.");
-    toast.success("Member removed");
-    refresh();
-  }
-
-  const canRemove = (r: Role) => (r === "member" ? isAdmin : isOwner);
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader title="Members" sub={`Your role: ${label(ws.role)}`} />
+    <div className="mx-auto max-w-6xl">
+      <header className="mb-7 border-b border-border pb-5">
+        <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">Human control layer</div>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Approval Queue</h1>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">AI prepares the repetitive work. Brett makes consequential decisions here. Nothing in this queue sends email or submits a tender automatically.</p>
+      </header>
 
-      {isAdmin && (
-        <section className="mb-8 rounded-lg border bg-card p-5">
-          <h2 className="text-sm font-semibold">Invite someone</h2>
-          <Alert className="my-3">
-            <AlertDescription>
-              No email is sent. Tell the person to sign up with this exact email address. They'll join the workspace on their first sign-in.
-            </AlertDescription>
-          </Alert>
-          <form onSubmit={invite} className="flex flex-wrap gap-2">
-            <Input type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} className="max-w-xs" aria-label="Invite email" />
-            {isOwner ? (
-              <OptionSelect value={role} onChange={setRole} options={["member", "admin"]} className="w-32" ariaLabel="Invite role" />
-            ) : (
-              <span className="self-center text-sm text-muted-foreground">as Member</span>
-            )}
-            <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Add invite"}
-            </Button>
-          </form>
-        </section>
-      )}
-
-      {q.isLoading ? (
-        <Skeleton className="h-40" />
-      ) : q.error ? (
-        <p className="text-destructive">{friendlyError(q.error)}</p>
+      {error && <div className="mb-4 border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
+      {!items.length ? (
+        <div className="grid min-h-56 place-items-center border border-dashed border-border p-8 text-center">
+          <div><ShieldCheck className="mx-auto h-7 w-7 text-muted-foreground" /><h2 className="mt-3 font-semibold">Nothing awaiting approval</h2><p className="mt-2 text-sm text-muted-foreground">Research a prospect and choose “Create approval item”.</p></div>
+        </div>
       ) : (
-        <>
-          <section className="rounded-lg border">
-            <h2 className="border-b px-4 py-3 text-sm font-semibold">Members ({q.data!.members.length})</h2>
-            <ul className="divide-y">
-              {q.data!.members.map((m) => {
-                const lastOwner = m.role === "owner" && ownerCount <= 1;
-                return (
-                  <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                    <div>
-                      <div className="font-medium">
-                        {m.name || "Unnamed member"} {m.user_id === ws.userId && <span className="text-xs text-muted-foreground">(you)</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isOwner ? (
-                        <OptionSelect
-                          value={m.role}
-                          onChange={(v) => setMemberRole(m.user_id, v)}
-                          options={["owner", "admin", "member"]}
-                          className="h-8 w-28"
-                          ariaLabel={`Role of ${m.name ?? "member"}`}
-                        />
-                      ) : (
-                        <span className="font-mono text-xs uppercase text-primary">{label(m.role)}</span>
-                      )}
-                      {canRemove(m.role as Role) && !lastOwner && (
-                        <ConfirmDelete
-                          title="Remove this member?"
-                          description="They'll lose access to the workspace immediately."
-                          onConfirm={() => removeMember(m.user_id)}
-                          trigger={
-                            <Button size="icon" variant="ghost" aria-label="Remove member">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-
-          <section className="mt-6 rounded-lg border">
-            <h2 className="border-b px-4 py-3 text-sm font-semibold">Pending invites ({q.data!.invites.length})</h2>
-            {q.data!.invites.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground">No pending invites.</p>
-            ) : (
-              <ul className="divide-y">
-                {q.data!.invites.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                    <span className="font-mono">{i.email}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs uppercase text-muted-foreground">{i.role}</span>
-                      {(i.role === "member" ? isAdmin : isOwner) && (
-                        <ConfirmDelete
-                          title="Remove this invite?"
-                          description={`${i.email} will no longer be able to join.`}
-                          onConfirm={() => removeInvite(i.id)}
-                          trigger={
-                            <Button size="icon" variant="ghost" aria-label={`Remove invite ${i.email}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
+        <div className="space-y-3">
+          {items.map((item) => {
+            const dossier = item.payload?.dossier;
+            return <article key={item.id} className="border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-3xl">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-primary">{item.kind}</div>
+                  <h2 className="mt-1 text-lg font-semibold">{item.title}</h2>
+                  {dossier?.next_action && <p className="mt-2 text-sm text-muted-foreground"><strong className="text-foreground">Proposed next action:</strong> {dossier.next_action}</p>}
+                  {dossier?.possible_first_approach && <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{dossier.possible_first_approach}</p>}
+                  <div className="mt-3 font-mono text-[10px] text-muted-foreground">Created {new Date(item.createdAt).toLocaleString()} · Updated {new Date(item.updatedAt).toLocaleString()}</div>
+                </div>
+                <div className="min-w-52">
+                  <label className="font-mono text-[10px] uppercase text-muted-foreground">Workflow state</label>
+                  <select value={item.state} disabled={busy === item.id} onChange={(e) => change(item.id, e.target.value as typeof STATES[number])} className="mt-1 h-10 w-full border border-input bg-background px-2 text-sm">
+                    {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button size="sm" onClick={() => change(item.id, "APPROVED")} disabled={busy === item.id}><Check className="mr-1 h-3.5 w-3.5" />Approve</Button>
+                    <Button size="sm" variant="outline" onClick={() => change(item.id, "NEEDS CHANGES")} disabled={busy === item.id}><RotateCcw className="mr-1 h-3.5 w-3.5" />Changes</Button>
+                    <Button size="sm" variant="outline" onClick={() => change(item.id, "NO BID")} disabled={busy === item.id}><X className="mr-1 h-3.5 w-3.5" />No bid</Button>
+                    <Button size="sm" variant="outline" onClick={() => change(item.id, "ARCHIVED")} disabled={busy === item.id}>Archive</Button>
+                  </div>
+                </div>
+              </div>
+            </article>;
+          })}
+        </div>
       )}
     </div>
   );
