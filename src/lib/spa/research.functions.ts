@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireRenderMember } from "@/integrations/render/auth-middleware";
 import { fetchPage, htmlToText, hostOf, rankedLinks } from "@/lib/prospect/web.server";
+import { aiJsonForOrg } from "@/lib/prospect/ai.server";
 import { BUSINESS_CONTEXTS, capabilityText } from "./capabilities";
 import { diagnosePublicPage } from "./fetch-diagnostic.server";
 import { getAiRuntime } from "./openrouter.server";
@@ -521,6 +522,337 @@ Do not call something a moat merely because the company says it is good at it. L
       businessContext: "spa",
       researchedAt: response.researchedAt,
       modelUsed: result.modelUsed,
+      status: direct.status === "ok" ? "completed" : "partial",
+      result: response,
+    });
+
+    return response;
+  });
+
+
+export const researchSpaIndustryStaged = createServerFn({ method: "POST" })
+  .middleware([requireRenderMember])
+  .inputValidator((d: unknown) => z.object({
+    industry: z.string().min(2).max(200),
+    region: z.string().min(2).max(200).default("Australia"),
+    focus: z.string().min(2).max(300),
+    businessContext,
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const profile = BUSINESS_CONTEXTS[data.businessContext];
+    const capabilities = (await getCapabilityProfile(context.organizationId)) || capabilityText();
+
+    type Discovery = {
+      organisations: {
+        name: string;
+        website: string | null;
+        location: string | null;
+        why_relevant: string;
+        source_url: string;
+      }[];
+      tenders: {
+        title: string;
+        issuer: string;
+        reference: string | null;
+        closing_date: string | null;
+        location: string | null;
+        source_url: string;
+        why_relevant: string;
+      }[];
+      external_signals: {
+        organisation: string;
+        signal: string;
+        location: string | null;
+        evidence_date: string | null;
+        source_url: string;
+      }[];
+    };
+
+    const discovery = await openRouterResearch<Discovery>(
+      context.organizationId,
+      `You are the discovery stage of SPA Intelligence for ${profile.name}.
+Find real, current organisations, documented project signals and procurement notices using current public web sources.
+This stage is discovery only. Keep it concise.
+Never invent companies, websites, projects, tenders, dates or locations.
+Every item needs a public source URL.
+Prefer primary company, government, procurement, project-owner and reputable industry sources.`,
+      `Industry: ${data.industry}
+Region: ${data.region}
+Opportunity focus: ${data.focus}
+Business lens: ${profile.lens}
+
+Find:
+- 8 to 12 organisations that are genuinely relevant.
+- up to 8 current external project / expansion / energy / infrastructure signals.
+- up to 5 documented tenders or procurement notices, only if actually found.
+
+Return JSON:
+{
+  "organisations":[{"name":"","website":"https://..."|null,"location":"","why_relevant":"","source_url":"https://..."}],
+  "external_signals":[{"organisation":"","signal":"","location":"","evidence_date":null,"source_url":"https://..."}],
+  "tenders":[{"title":"","issuer":"","reference":null,"closing_date":null,"location":"","source_url":"https://...","why_relevant":""}]
+}
+
+Do not perform long strategic analysis in this stage. Discovery and evidence only.`,
+    );
+
+    const rawCandidates = (discovery.data.organisations ?? [])
+      .filter((x) => x?.name && x?.source_url)
+      .slice(0, 12);
+
+    const verified = await Promise.all(
+      rawCandidates.map(async (item) => {
+        const domain = item.website ? normalizeQueryDomain(item.website) : null;
+        if (!domain) return null;
+        const direct = await directWebsiteContext(domain);
+        if (direct.status !== "ok" || !direct.pages.length) return null;
+        return {
+          ...item,
+          website: item.website || `https://${domain}`,
+          directPages: direct.pages.slice(0, 6),
+        };
+      }),
+    );
+
+    const verifiedOrgs = verified.filter(Boolean) as Array<{
+      name: string;
+      website: string | null;
+      location: string | null;
+      why_relevant: string;
+      source_url: string;
+      directPages: { url: string; text: string }[];
+    }>;
+
+    type Synthesis = {
+      organisations: { name: string; website: string | null; location: string | null; why_relevant: string; source_url: string }[];
+      signals: { organisation: string; signal: string; location: string | null; evidence_date: string | null; source_url: string; spa_fit: string; classification: string }[];
+      market_notes: string[];
+    };
+
+    const directCorpus = verifiedOrgs.map((org) => [
+      `ORGANISATION: ${org.name}`,
+      `KNOWN WEBSITE: ${org.website ?? ""}`,
+      `DISCOVERY SOURCE: ${org.source_url}`,
+      `DISCOVERY RELEVANCE: ${org.why_relevant}`,
+      ...org.directPages.map((p) => `URL: ${p.url}\n${p.text}`),
+    ].join("\n")).join("\n---\n").slice(0, 60000);
+
+    const externalSignals = (discovery.data.external_signals ?? [])
+      .filter((x) => x?.organisation && x?.signal && /^https?:\/\//i.test(String(x.source_url ?? "")))
+      .slice(0, 8);
+
+    const synthesis = await aiJsonForOrg<Synthesis>(
+      context.organizationId,
+      `You are the evidence-synthesis stage of SPA Intelligence for ${profile.name}.
+Use the verified company website material plus the separately supplied web-discovery evidence.
+Do not invent anything.
+A company website statement is a SOURCE_CLAIM unless the text directly establishes the fact.
+Commercial fit is analysis, not fact.
+Keep factual evidence and SPA fit separate.`,
+      `Industry: ${data.industry}
+Region: ${data.region}
+Focus: ${data.focus}
+
+SPA CAPABILITY PROFILE:
+${capabilities.slice(0, 12000)}
+
+VERIFIED LIVE COMPANY MATERIAL:
+${directCorpus || "(No candidate websites passed verification.)"}
+
+EXTERNAL CURRENT SIGNALS FROM WEB DISCOVERY:
+${JSON.stringify(externalSignals)}
+
+Return JSON:
+{
+  "organisations":[{"name":"","website":"https://..."|null,"location":"","why_relevant":"","source_url":"https://..."}],
+  "signals":[{"organisation":"","signal":"","location":"","evidence_date":null,"source_url":"https://...","spa_fit":"","classification":"OBSERVED_FACT|SOURCE_CLAIM|INFERENCE"}],
+  "market_notes":["..."]
+}
+
+Rules:
+- Only return organisations whose public website was included in VERIFIED LIVE COMPANY MATERIAL.
+- Use the organisation's website or the strongest discovery source as source_url.
+- For signals, preserve exact external source URLs when using external signals.
+- You may also identify signals visible on the verified company websites.
+- spa_fit must be framed as potential fit, not an assertion that the organisation needs SPA.
+- Do not invent contact people, budgets, contract values or equipment requirements.`,
+      "medium",
+    );
+
+    const cleanLocation = (value: unknown): string | null => {
+      const location = typeof value === "string" ? value.trim() : "";
+      if (!location || /^(?:unknown|n\/?a|none|null|not\s+(?:stated|found|available|supplied|provided))$/i.test(location)) return null;
+      return location.slice(0, 200);
+    };
+
+    const allowedWebsites = new Set(
+      verifiedOrgs.flatMap((x) => [x.website, ...x.directPages.map((p) => p.url)]).filter(Boolean) as string[],
+    );
+    const allowedDiscoverySources = new Set(rawCandidates.map((x) => x.source_url).filter(Boolean));
+    const allowedSignalSources = new Set(externalSignals.map((x) => x.source_url).filter(Boolean));
+
+    const organisations = (synthesis.organisations ?? [])
+      .map((x) => ({
+        ...x,
+        location: cleanLocation(x.location),
+        source_url: String(x.source_url ?? ""),
+      }))
+      .filter((x) => x.name && x.website && x.location && (allowedWebsites.has(x.source_url) || allowedDiscoverySources.has(x.source_url)))
+      .slice(0, 10);
+
+    const signals = (synthesis.signals ?? [])
+      .map((x) => ({ ...x, location: cleanLocation(x.location), source_url: String(x.source_url ?? "") }))
+      .filter((x) => x.organisation && x.signal && x.location && x.source_url && (
+        allowedSignalSources.has(x.source_url) || allowedWebsites.has(x.source_url) || allowedDiscoverySources.has(x.source_url)
+      ))
+      .slice(0, 12);
+
+    const tenders = (discovery.data.tenders ?? [])
+      .map((x) => ({
+        title: String(x.title ?? "").trim(),
+        issuer: String(x.issuer ?? "").trim(),
+        reference: x.reference ? String(x.reference).trim() : null,
+        closing_date: x.closing_date ? String(x.closing_date).trim() : null,
+        location: cleanLocation(x.location),
+        source_url: String(x.source_url ?? "").trim(),
+        spa_fit: String(x.why_relevant ?? "").trim(),
+      }))
+      .filter((x) => x.title && x.issuer && x.location && /^https?:\/\//i.test(x.source_url))
+      .slice(0, 5);
+
+    const response = {
+      organisations,
+      signals,
+      tenders,
+      market_notes: synthesis.market_notes ?? [],
+      modelUsed: discovery.modelUsed,
+      synthesisModelUsed: "workspace-selected",
+      researchedAt: new Date().toISOString(),
+      verification: {
+        discoveredOrganisations: rawCandidates.length,
+        verifiedLiveOrganisations: verifiedOrgs.length,
+      },
+    };
+
+    await saveResearchRun(context.organizationId, {
+      query: `${data.industry} · ${data.region} · ${data.focus}`,
+      researchType: "industry-staged",
+      businessContext: data.businessContext,
+      researchedAt: response.researchedAt,
+      modelUsed: discovery.modelUsed,
+      status: verifiedOrgs.length ? "completed" : "partial",
+      result: response,
+    });
+
+    return response;
+  });
+
+export const researchSpaVentureStaged = createServerFn({ method: "POST" })
+  .middleware([requireRenderMember])
+  .inputValidator((d: unknown) => z.object({
+    query: z.string().min(2).max(500),
+    businessContext: z.literal("elmofo").default("elmofo"),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const domain = normalizeQueryDomain(data.query);
+    const direct = await directWebsiteContext(domain);
+    const capabilities = (await getCapabilityProfile(context.organizationId)) || capabilityText();
+    const directText = direct.pages.map((p) => `URL: ${p.url}\n${p.text}`).join("\n---\n").slice(0, 32000);
+
+    type External = {
+      organisation: string;
+      official_website: string | null;
+      current_signals: { item: string; source_url: string; evidence_date: string | null }[];
+      people: { name: string; title: string; source_url: string }[];
+      partnerships: { item: string; source_url: string; evidence_date: string | null }[];
+    };
+
+    const external = await openRouterResearch<External>(
+      context.organizationId,
+      `You are the current-web discovery stage for ELMOFO / Brett Sutherland innovation intelligence.
+Research the named venture, company or technology target using current public sources.
+Focus on EV engineering, electrification, battery systems, prototype engineering, motorsport technology, specialist manufacturing, partnerships and commercialisation.
+Never invent people, partnerships, projects, dates or technology claims.`,
+      `Target: ${data.query}
+Return concise JSON:
+{
+  "organisation":"",
+  "official_website":"https://..."|null,
+  "current_signals":[{"item":"","source_url":"https://...","evidence_date":null}],
+  "people":[{"name":"","title":"","source_url":"https://..."}],
+  "partnerships":[{"item":"","source_url":"https://...","evidence_date":null}]
+}
+Every returned item needs a public source URL.`,
+    );
+
+    type Venture = {
+      organisation: string;
+      official_website: string | null;
+      industry: string | null;
+      locations: string[];
+      what_the_company_does: string;
+      current_projects: { item: string; source_url: string; evidence_date: string | null; classification: string }[];
+      recent_developments: { item: string; source_url: string; evidence_date: string | null; classification: string }[];
+      energy_power_infrastructure_context: string[];
+      capability_matches: { capability: string; provenance: "CONFIRMED" | "LIKELY / ADJACENT" | "NEEDS VERIFICATION"; rationale: string; classification: string }[];
+      opportunity_hypotheses: { hypothesis: string; why_now: string; source_url: string | null; classification: "INFERENCE" | "COMMERCIAL_HYPOTHESIS"; validation_needed: string }[];
+      people: { name: string; title: string; contact: string | null; source_url: string; classification: string }[];
+      tenders: { title: string; reference: string | null; closing_date: string | null; source_url: string; classification: string }[];
+      risks_unknowns: string[];
+      questions_spa_should_ask: string[];
+      possible_first_approach: string;
+      follow_up_strategy: string;
+      next_action: string;
+      evidence: { statement: string; source_url: string; evidence_date: string | null; classification: "OBSERVED_FACT" | "SOURCE_CLAIM" | "INFERENCE" | "COMMERCIAL_HYPOTHESIS" | "UNKNOWN" }[];
+    };
+
+    const dossier = await aiJsonForOrg<Venture>(
+      context.organizationId,
+      `You are the synthesis stage of SPA Intelligence working under the ELMOFO innovation lens.
+Use direct website evidence plus separately collected current public-web evidence.
+Separate OBSERVED_FACT, SOURCE_CLAIM, INFERENCE, COMMERCIAL_HYPOTHESIS and UNKNOWN.
+Do not make generic solar assumptions unless the evidence actually connects the target to solar.
+Do not invent people, contacts, customers, projects or technical capabilities.`,
+      `Target: ${data.query}
+
+DIRECT WEBSITE RETRIEVAL STATUS: ${direct.status}
+DIRECT WEBSITE MATERIAL:
+${directText || "(No direct website material available.)"}
+
+CURRENT EXTERNAL WEB EVIDENCE:
+${JSON.stringify(external.data)}
+
+SPA / ELMOFO CAPABILITY CONTEXT:
+${capabilities.slice(0, 12000)}
+
+Return the same evidence-rich JSON dossier shape used by SPA Intelligence:
+organisation, official_website, industry, locations, what_the_company_does,
+current_projects[], recent_developments[], energy_power_infrastructure_context[],
+capability_matches[], opportunity_hypotheses[], people[], tenders[],
+risks_unknowns[], questions_spa_should_ask[], possible_first_approach,
+follow_up_strategy, next_action, evidence[].
+
+Every factual item must point to an exact URL from the supplied direct material or external evidence.
+Commercial hypotheses must be labelled as such.`,
+      "medium",
+    );
+
+    const response = {
+      query: data.query,
+      businessContext: "elmofo",
+      mode: "venture",
+      directRetrieval: direct,
+      dossier,
+      modelUsed: external.modelUsed,
+      researchedAt: new Date().toISOString(),
+    };
+
+    await saveResearchRun(context.organizationId, {
+      query: data.query,
+      researchType: "venture-staged",
+      businessContext: "elmofo",
+      researchedAt: response.researchedAt,
+      modelUsed: external.modelUsed,
       status: direct.status === "ok" ? "completed" : "partial",
       result: response,
     });
