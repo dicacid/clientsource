@@ -1,6 +1,6 @@
 import { createMiddleware } from "@tanstack/react-start";
 
-const STORAGE_KEY = "clientsource.session";
+const STORAGE_KEY = "spa-intelligence.session";
 
 export const attachRenderAuth = createMiddleware({ type: "function" }).client(async ({ next }) => {
   let token: string | null = null;
