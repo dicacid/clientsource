@@ -1,1 +1,0 @@
-drop function if exists public.seed_sample_data();
