@@ -75,6 +75,7 @@ function ProspectPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [claims, setClaims] = useState("");
+  const [prefillTarget, setPrefillTarget] = useState<any | null>(null);
   const runId = useRef(0);
   const domainKey = claimKey(website);
 
@@ -98,6 +99,15 @@ function ProspectPage() {
       if (s.region === "domestic" || s.region === "international" || s.region === "both") setRegion(s.region);
     } catch {
       /* ignore */
+    }
+    try {
+      const raw = localStorage.getItem("spa-intelligence.prospect.prefill");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.name || parsed?.website) setPrefillTarget(parsed);
+      }
+    } catch {
+      localStorage.removeItem("spa-intelligence.prospect.prefill");
     }
     renderDb
       .from("profiles")
@@ -202,6 +212,31 @@ function ProspectPage() {
       const a = await analyze({ data: { website } });
       if (id !== runId.current) return;
       setAnalysis(a);
+
+      if (prefillTarget) {
+        const normalized = normalizeWebsite(prefillTarget.website || "");
+        const domain = normalized
+          ? normalized.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]!
+          : "";
+        if (!domain) {
+          setPhase("done");
+          return setError("The selected industry result does not have a usable public website.");
+        }
+        const target: Target = {
+          name: String(prefillTarget.name || domain).slice(0, 200),
+          domain,
+          industry: String(prefillTarget.industry || "").slice(0, 120),
+          country: String(prefillTarget.country || prefillTarget.location || "Australia").slice(0, 80),
+          employee_range: String(prefillTarget.employee_range || "").slice(0, 20),
+          why_fit: String(prefillTarget.why_relevant || prefillTarget.spa_fit || "Selected from SPA Industry Intelligence.").slice(0, 500),
+        };
+        setRows([{ ...target, state: "queued" }]);
+        localStorage.removeItem("spa-intelligence.prospect.prefill");
+        setPrefillTarget(null);
+        await runResearch([target], a);
+        return;
+      }
+
       setPhase("discovering");
       const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region } });
       if (id !== runId.current) return;
@@ -349,6 +384,23 @@ function ProspectPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="SPA Prospect Intelligence" sub="Solar Power Australia in, verified matching companies, decision-makers, evidence and outreach out." />
 
+      {prefillTarget && (
+        <div className="mb-4 border border-primary/30 bg-primary/5 p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Selected from Industry Intelligence</div>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <strong>{prefillTarget.name || prefillTarget.website}</strong>
+              {prefillTarget.location && <div className="mt-1 text-xs text-muted-foreground">{prefillTarget.location}</div>}
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => {
+              localStorage.removeItem("spa-intelligence.prospect.prefill");
+              setPrefillTarget(null);
+            }}>Clear target</Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">The next run will skip broad discovery and send this organisation straight through the proven website, evidence, contact and outreach research pipeline.</p>
+        </div>
+      )}
+
       <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_160px_auto] sm:items-end">
         <div className="space-y-1.5">
           <Label htmlFor="p-name">Your name</Label>
@@ -391,7 +443,7 @@ function ProspectPage() {
         </div>
         <Button type="submit" disabled={busy} className="gap-2 sm:col-start-5">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          Find prospects
+          {prefillTarget ? "Research selected prospect" : "Find prospects"}
         </Button>
       </form>
 
