@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { ExternalLink, Radar, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaIndustry } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/dashboard")({
@@ -39,7 +40,7 @@ function OpportunityRadar() {
         <Button onClick={run} disabled={busy}><Radar className="mr-2 h-4 w-4" />{busy ? "Scanning…" : "Run Australian opportunity scan"}</Button>
       </header>
 
-      {busy && <div className="mb-5 border border-primary/30 bg-primary/5 p-4 text-sm text-muted-foreground">Searching current public organisations, project signals and tenders, then matching them against SPA capabilities. Nothing shown here is pre-invented demo data.</div>}
+      {busy && <div className="mb-5"><ResearchProgress detail="Searching current Australian organisations, project signals and tenders, then matching them against SPA capabilities." /></div>}
       {error && <div className="mb-5 border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
 
       {!data && !busy ? (
