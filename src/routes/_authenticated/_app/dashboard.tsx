@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COMPANY_STATUSES, label, localDate } from "@/lib/constants";
@@ -33,11 +33,11 @@ function Dashboard() {
       const org = ws.organizationId;
       const head = { count: "exact" as const, head: true };
       const [companies, contacts, ...statuses] = await Promise.all([
-        supabase.from("companies").select("id", head).eq("organization_id", org),
-        supabase.from("contacts").select("id", head).eq("organization_id", org),
-        ...COMPANY_STATUSES.map((s) => supabase.from("companies").select("id", head).eq("organization_id", org).eq("status", s)),
+        renderDb.from("companies").select("id", head).eq("organization_id", org),
+        renderDb.from("contacts").select("id", head).eq("organization_id", org),
+        ...COMPANY_STATUSES.map((s) => renderDb.from("companies").select("id", head).eq("organization_id", org).eq("status", s)),
       ]);
-      const due = await supabase
+      const due = await renderDb
         .from("contacts")
         .select("id, full_name, next_follow_up, status, companies(name)", { count: "exact" })
         .eq("organization_id", org)
