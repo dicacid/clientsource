@@ -5,6 +5,7 @@ import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { IntelligenceResult } from "@/components/spa/IntelligenceResult";
+import { ResearchProgress } from "@/components/spa/ResearchProgress";
 import { researchSpaCompany } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/companies")({
@@ -53,7 +54,7 @@ function Competitors() {
         </div>
       </form>
 
-      {progress && <div className="mt-4 border border-primary/30 bg-primary/5 p-3 text-sm text-muted-foreground">{progress}</div>}
+      {progress && <div className="mt-4"><ResearchProgress detail={progress} /></div>}
       {error && <div className="mt-4 border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
       {results.map((r, i) => <IntelligenceResult key={i} result={r} title="Competitor dossier" />)}
       {!busy && !results.length && !error && <div className="mt-8 grid min-h-48 place-items-center border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Enter a competitor Brett knows and build a live public-intelligence dossier.</div>}
