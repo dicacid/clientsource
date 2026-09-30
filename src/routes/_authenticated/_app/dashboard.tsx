@@ -1,144 +1,90 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { renderDb } from "@/integrations/render/client";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { ExternalLink, Radar, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { COMPANY_STATUSES, label, localDate } from "@/lib/constants";
-import { friendlyError } from "@/lib/errors";
-import { useWorkspace } from "@/lib/workspace";
-import { EmptyState, PageHeader, StatusBadge } from "@/components/crm/shared";
+import { researchSpaIndustry } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/dashboard")({
-  head: () => ({
-    meta: [
-      { title: "Dashboard — Prospect Finder B2B" },
-      { name: "description", content: "Pipeline overview and upcoming follow-ups." },
-      { property: "og:title", content: "Dashboard — Prospect Finder B2B" },
-      { property: "og:description", content: "Pipeline overview and upcoming follow-ups." },
-    ],
-  }),
-  component: Dashboard,
+  head: () => ({ meta: [{ title: "Opportunity Radar — SPA Intelligence" }] }),
+  component: OpportunityRadar,
 });
 
-function Dashboard() {
-  const ws = useWorkspace();
-  const qc = useQueryClient();
-  const today = localDate();
-  const in7 = localDate(7);
-
-  const q = useQuery({
-    queryKey: ["dashboard", ws.organizationId, today],
-    queryFn: async () => {
-      const org = ws.organizationId;
-      const head = { count: "exact" as const, head: true };
-      const [companies, contacts, ...statuses] = await Promise.all([
-        renderDb.from("companies").select("id", head).eq("organization_id", org),
-        renderDb.from("contacts").select("id", head).eq("organization_id", org),
-        ...COMPANY_STATUSES.map((s) => renderDb.from("companies").select("id", head).eq("organization_id", org).eq("status", s)),
-      ]);
-      const due = await renderDb
-        .from("contacts")
-        .select("id, full_name, next_follow_up, status, companies(name)", { count: "exact" })
-        .eq("organization_id", org)
-        .gte("next_follow_up", today)
-        .lte("next_follow_up", in7)
-        .not("status", "in", "(customer,lost)")
-        .order("next_follow_up")
-        .limit(20);
-      for (const r of [companies, contacts, ...statuses, due]) if (r.error) throw r.error;
-      return {
-        companies: companies.count ?? 0,
-        contacts: contacts.count ?? 0,
-        funnel: COMPANY_STATUSES.map((s, i) => ({ status: s, count: statuses[i]!.count ?? 0 })),
-        due: due.data ?? [],
-        dueCount: due.count ?? 0,
-      };
-    },
-  });
-
-  const max = Math.max(1, ...(q.data?.funnel.map((f) => f.count) ?? [1]));
-
-  return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title="Dashboard"
-        sub={`Today is ${today} (your local date)`}
-        actions={
-          <Button asChild>
-            <Link to="/prospect">Find prospects</Link>
-          </Button>
-        }
-      />
-      {q.isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-64 sm:col-span-2" />
-        </div>
-      ) : q.error ? (
-        <p className="text-destructive">{friendlyError(q.error)}</p>
-      ) : q.data!.companies === 0 ? (
-        <EmptyState
-          title="No prospects yet. Enter your name, email and website in the Prospect finder, then save the companies you want to pursue."
-          action={
-            <Button asChild>
-              <Link to="/prospect">Open Prospect finder</Link>
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Stat k="Companies" v={q.data!.companies} />
-          <Stat k="Contacts" v={q.data!.contacts} />
-          <section className="rounded-lg border bg-card p-5 sm:col-span-2">
-            <h2 className="mb-4 text-sm font-semibold">Pipeline</h2>
-            <div className="space-y-2">
-              {q.data!.funnel.map((f) => (
-                <div key={f.status} className="grid grid-cols-[110px_1fr_40px] items-center gap-3 text-sm">
-                  <span className="text-muted-foreground">{label(f.status)}</span>
-                  <div className="h-5 rounded bg-muted">
-                    <div className="h-5 rounded bg-primary/80" style={{ width: `${(f.count / max) * 100}%` }} />
-                  </div>
-                  <span className="text-right font-mono">{f.count}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="rounded-lg border bg-card p-5 sm:col-span-2">
-            <h2 className="mb-4 text-sm font-semibold">
-              Follow-ups due {today} → {in7} <span className="font-mono text-primary">({q.data!.dueCount})</span>
-            </h2>
-            {q.data!.due.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing due this week.</p>
-            ) : (
-              <ul className="divide-y">
-                {q.data!.due.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                    <div className="min-w-0">
-                      <span className="font-medium">{c.full_name}</span>
-                      <span className="text-muted-foreground"> · {(c.companies as { name: string } | null)?.name}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <StatusBadge status={c.status} />
-                      <span className="font-mono text-xs">{c.next_follow_up}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
-    </div>
-  );
+function Source({ href }: { href: string }) {
+  return <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">Evidence <ExternalLink className="h-3 w-3" /></a>;
 }
 
-function Stat({ k, v }: { k: string; v: number }) {
+function OpportunityRadar() {
+  const scan = useServerFn(researchSpaIndustry);
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true); setError(null);
+    try {
+      setData(await scan({ data: { industry: "Mining, resources and remote industrial infrastructure", region: "Australia", focus: "Remote power, BESS, hybrid energy, diesel displacement, electrification and industrial solar", businessContext: "spa" } }));
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setBusy(false); }
+  }
+
   return (
-    <div className="rounded-lg border bg-card p-5">
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">{k}</div>
-      <div className="mt-1 font-mono text-3xl">{v}</div>
+    <div className="mx-auto max-w-7xl">
+      <header className="mb-7 flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">SPA Intelligence / flagship</div>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Opportunity Radar</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">What should Brett pay attention to? This scan searches current public signals and keeps evidence separate from commercial inference.</p>
+        </div>
+        <Button onClick={run} disabled={busy}><Radar className="mr-2 h-4 w-4" />{busy ? "Scanning…" : "Run Australian opportunity scan"}</Button>
+      </header>
+
+      {busy && <div className="mb-5 border border-primary/30 bg-primary/5 p-4 text-sm text-muted-foreground">Searching current public organisations, project signals and tenders, then matching them against SPA capabilities. Nothing shown here is pre-invented demo data.</div>}
+      {error && <div className="mb-5 border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
+
+      {!data && !busy ? (
+        <div className="grid min-h-72 place-items-center border border-dashed border-border p-8 text-center">
+          <div>
+            <Search className="mx-auto h-7 w-7 text-muted-foreground" />
+            <h2 className="mt-3 font-semibold">No fabricated dashboard statistics</h2>
+            <p className="mt-2 max-w-lg text-sm text-muted-foreground">Run a live scan to populate this screen with public evidence, or research a company directly in Prospects.</p>
+            <Button asChild variant="outline" className="mt-4"><Link to="/prospect">Research a company</Link></Button>
+          </div>
+        </div>
+      ) : data && (
+        <div className="space-y-5">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="border border-border bg-card p-4"><div className="font-mono text-[10px] uppercase text-muted-foreground">Organisations found</div><div className="mt-1 text-3xl font-semibold">{data.organisations?.length ?? 0}</div></div>
+            <div className="border border-border bg-card p-4"><div className="font-mono text-[10px] uppercase text-muted-foreground">Current signals</div><div className="mt-1 text-3xl font-semibold">{data.signals?.length ?? 0}</div></div>
+            <div className="border border-border bg-card p-4"><div className="font-mono text-[10px] uppercase text-muted-foreground">Tender notices found</div><div className="mt-1 text-3xl font-semibold">{data.tenders?.length ?? 0}</div></div>
+          </div>
+
+          <section className="border border-border bg-card">
+            <div className="border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">New opportunities / signals</div>
+            <div className="divide-y divide-border">
+              {(data.signals ?? []).map((s: any, i: number) => (
+                <article key={i} className="p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div><h3 className="font-semibold">{s.organisation}</h3><div className="mt-1 font-mono text-[10px] uppercase text-muted-foreground">{s.location || "Location not stated"}{s.evidence_date ? ` · ${s.evidence_date}` : ""}</div></div>
+                    <Source href={s.source_url} />
+                  </div>
+                  <p className="mt-3 text-sm">{s.signal}</p>
+                  <div className="mt-3 border-l-2 border-primary/50 pl-3 text-sm text-muted-foreground"><strong className="text-foreground">Potential SPA fit:</strong> {s.spa_fit}</div>
+                  <div className="mt-2 font-mono text-[10px] uppercase text-amber-300">{s.classification || "classification not supplied"}</div>
+                </article>
+              ))}
+              {!data.signals?.length && <div className="p-6 text-sm text-muted-foreground">No supported current signals were returned for this scan.</div>}
+            </div>
+          </section>
+
+          {!!data.tenders?.length && <section className="border border-border bg-card">
+            <div className="border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Tenders / procurement</div>
+            <div className="divide-y divide-border">{data.tenders.map((t: any, i: number) => <article key={i} className="p-4"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-semibold">{t.title}</h3><p className="mt-1 text-xs text-muted-foreground">{t.issuer} · Ref {t.reference || "not published"} · Closing {t.closing_date || "not found"}</p></div><Source href={t.source_url} /></div><p className="mt-3 text-sm text-muted-foreground"><strong className="text-foreground">SPA fit:</strong> {t.spa_fit}</p></article>)}</div>
+          </section>}
+
+          <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}</div>
+        </div>
+      )}
     </div>
   );
 }
