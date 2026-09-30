@@ -16,9 +16,9 @@ import { ConfirmDelete, OptionSelect, PageHeader } from "@/components/crm/shared
 export const Route = createFileRoute("/_authenticated/_app/members")({
   head: () => ({
     meta: [
-      { title: "Members — Pipeline" },
+      { title: "Members — Prospect Finder B2B" },
       { name: "description", content: "Workspace members, roles and pending invites." },
-      { property: "og:title", content: "Members — Pipeline" },
+      { property: "og:title", content: "Members — Prospect Finder B2B" },
       { property: "og:description", content: "Workspace members, roles and pending invites." },
     ],
   }),

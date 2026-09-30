@@ -9,9 +9,9 @@ export const Route = createFileRoute("/_authenticated/_app/settings")({
   component: SettingsPage,
   head: () => ({
     meta: [
-      { title: "Settings — Pipeline" },
+      { title: "Settings — Prospect Finder B2B" },
       { name: "description", content: "Workspace settings: AI provider and API key status." },
-      { property: "og:title", content: "Settings — Pipeline" },
+      { property: "og:title", content: "Settings — Prospect Finder B2B" },
       { property: "og:description", content: "Workspace settings: AI provider and API key status." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

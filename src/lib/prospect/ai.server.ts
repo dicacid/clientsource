@@ -40,8 +40,7 @@ async function openRouterJson<T>(system: string, user: string): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       Authorization: "Bearer " + apiKey,
-      "HTTP-Referer": "https://clientsource.onrender.com",
-      "X-Title": "ClientSource",
+      "X-Title": "Prospect Finder B2B",
     },
     body: JSON.stringify({
       model: OPENROUTER_MODEL,

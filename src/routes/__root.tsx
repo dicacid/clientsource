@@ -74,7 +74,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Pipeline — Team prospecting workspace" },
+      { title: "Prospect Finder B2B — Team prospecting workspace" },
       { name: "description", content: "Private workspace for a sales team to track target companies, contacts and pipeline." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

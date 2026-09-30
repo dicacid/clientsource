@@ -19,9 +19,9 @@ import { CompanyDrawer } from "@/components/crm/CompanyDrawer";
 export const Route = createFileRoute("/_authenticated/_app/companies")({
   head: () => ({
     meta: [
-      { title: "Companies — Pipeline" },
+      { title: "Companies — Prospect Finder B2B" },
       { name: "description", content: "Search, filter and manage target companies." },
-      { property: "og:title", content: "Companies — Pipeline" },
+      { property: "og:title", content: "Companies — Prospect Finder B2B" },
       { property: "og:description", content: "Search, filter and manage target companies." },
     ],
   }),

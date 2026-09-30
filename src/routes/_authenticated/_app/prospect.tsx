@@ -29,9 +29,9 @@ import {
 export const Route = createFileRoute("/_authenticated/_app/prospect")({
   head: () => ({
     meta: [
-      { title: "Prospect finder — Pipeline" },
+      { title: "Prospect finder — Prospect Finder B2B" },
       { name: "description", content: "Analyze your website, discover matching companies and draft personalized outreach." },
-      { property: "og:title", content: "Prospect finder — Pipeline" },
+      { property: "og:title", content: "Prospect finder — Prospect Finder B2B" },
       { property: "og:description", content: "Analyze your website, discover matching companies and draft personalized outreach." },
     ],
   }),
@@ -136,7 +136,7 @@ function ProspectPage() {
     setError(null);
     if (!sender.name) return setError("Enter your name.");
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
-    if (!normalizeWebsite(website)) return setError("Enter your website, like cadenceops.app");
+    if (!normalizeWebsite(website)) return setError("Enter your website, like example.com");
     localStorage.setItem(STORE, JSON.stringify({ ...sender, website, region }));
     // Fresh run: drop any previous sender's analysis, prospects and drafts.
     const id = ++runId.current;
@@ -294,7 +294,7 @@ function ProspectPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="p-site">Your business website</Label>
-          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="cadenceops.app" />
+          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="p-region">Target region</Label>

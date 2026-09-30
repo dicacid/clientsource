@@ -16,9 +16,9 @@ import { PageHeader } from "@/components/crm/shared";
 export const Route = createFileRoute("/_authenticated/_app/import")({
   head: () => ({
     meta: [
-      { title: "Import CSV — Pipeline" },
+      { title: "Import CSV — Prospect Finder B2B" },
       { name: "description", content: "Import companies and contacts from CSV." },
-      { property: "og:title", content: "Import CSV — Pipeline" },
+      { property: "og:title", content: "Import CSV — Prospect Finder B2B" },
       { property: "og:description", content: "Import companies and contacts from CSV." },
     ],
   }),

@@ -38,7 +38,7 @@ function AppLayout() {
       <aside className="border-b bg-sidebar md:sticky md:top-0 md:h-screen md:w-56 md:shrink-0 md:border-b-0 md:border-r">
         <div className="flex items-center justify-between px-4 py-4 md:block">
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">Pipeline</div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">Prospect Finder B2B</div>
             <div className="truncate text-sm font-semibold">{membership.orgName}</div>
           </div>
           <button onClick={out} className="text-muted-foreground hover:text-foreground md:hidden" aria-label="Sign out">

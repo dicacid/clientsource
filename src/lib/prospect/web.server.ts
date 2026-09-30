@@ -1,5 +1,5 @@
 // Server-only public-website reader. Fetches a few public pages; never logs in or bypasses anything.
-const UA = "Mozilla/5.0 (compatible; PipelineProspector/1.0)";
+const UA = "Mozilla/5.0 (compatible; ProspectFinderB2B/1.0)";
 
 export async function fetchPage(url: string, timeoutMs = 7000): Promise<{ url: string; html: string } | null> {
   const ctrl = new AbortController();

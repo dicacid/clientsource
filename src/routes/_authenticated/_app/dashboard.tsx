@@ -12,9 +12,9 @@ import { EmptyState, PageHeader, StatusBadge } from "@/components/crm/shared";
 export const Route = createFileRoute("/_authenticated/_app/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard — Pipeline" },
+      { title: "Dashboard — Prospect Finder B2B" },
       { name: "description", content: "Pipeline overview and upcoming follow-ups." },
-      { property: "og:title", content: "Dashboard — Pipeline" },
+      { property: "og:title", content: "Dashboard — Prospect Finder B2B" },
       { property: "og:description", content: "Pipeline overview and upcoming follow-ups." },
     ],
   }),

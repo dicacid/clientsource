@@ -20,9 +20,9 @@ import { ContactForm, type ContactRow } from "@/components/crm/ContactForm";
 export const Route = createFileRoute("/_authenticated/_app/contacts")({
   head: () => ({
     meta: [
-      { title: "Contacts — Pipeline" },
+      { title: "Contacts — Prospect Finder B2B" },
       { name: "description", content: "People at your target companies and their follow-ups." },
-      { property: "og:title", content: "Contacts — Pipeline" },
+      { property: "og:title", content: "Contacts — Prospect Finder B2B" },
       { property: "og:description", content: "People at your target companies and their follow-ups." },
     ],
   }),

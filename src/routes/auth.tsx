@@ -10,9 +10,9 @@ import { EMAIL_RE } from "@/lib/constants";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — Pipeline" },
+      { title: "Sign in — Prospect Finder B2B" },
       { name: "description", content: "Sign in to your team's prospecting workspace." },
-      { property: "og:title", content: "Sign in — Pipeline" },
+      { property: "og:title", content: "Sign in — Prospect Finder B2B" },
       { property: "og:description", content: "Sign in to your team's prospecting workspace." },
     ],
   }),
@@ -62,7 +62,7 @@ function AuthPage() {
     <main className="grid min-h-screen place-items-center bg-background px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8">
-          <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Pipeline</div>
+          <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Prospect Finder B2B</div>
           <h1 className="mt-2 text-2xl font-semibold">
             {mode === "signin" ? "Sign in to your workspace" : "Create your account"}
           </h1>

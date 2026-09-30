@@ -13,9 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({
     meta: [
-      { title: "Get started — Pipeline" },
+      { title: "Get started — Prospect Finder B2B" },
       { name: "description", content: "Set up or join your team's workspace." },
-      { property: "og:title", content: "Get started — Pipeline" },
+      { property: "og:title", content: "Get started — Prospect Finder B2B" },
       { property: "og:description", content: "Set up or join your team's workspace." },
     ],
   }),
@@ -66,7 +66,7 @@ function Onboarding() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4">
       <div className="w-full max-w-md rounded-lg border bg-card p-8">
-        <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Pipeline</div>
+        <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Prospect Finder B2B</div>
         {state === "loading" && (
           <div className="mt-4 space-y-3">
             <Skeleton className="h-7 w-2/3" />

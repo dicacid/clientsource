@@ -10,7 +10,7 @@ function HealthPage() {
   const data = Route.useLoaderData();
   return (
     <main style={{ fontFamily: "monospace", padding: 24 }}>
-      <h1>ClientSource health</h1>
+      <h1>Prospect Finder B2B health</h1>
       <pre>{JSON.stringify(data, null, 2)}</pre>
     </main>
   );
