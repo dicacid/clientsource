@@ -1,5 +1,5 @@
 {
-  "name": "prospect-finder-b2b",
+  "name": "spa-intelligence",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -91,7 +91,7 @@
     "vite": "8.1.5"
   },
   "version": "0.1.0",
-  "description": "Self-hosted B2B prospecting CRM with public-web research and optional OpenRouter-assisted drafting.",
+  "description": "Private commercial-intelligence platform for Solar Power Australia with evidence-backed research and OpenRouter BYOK.",
   "license": "MIT",
   "repository": {
     "type": "git",
