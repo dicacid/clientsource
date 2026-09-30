@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Sparkles, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut } from "lucide-react";
+import { Sparkles, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut, Settings } from "lucide-react";
 import { resolveMembership, signOut } from "@/lib/session";
 import { label } from "@/lib/constants";
 
@@ -20,6 +20,7 @@ const NAV = [
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/import", label: "Import", icon: FileUp },
   { to: "/members", label: "Members", icon: UserCog },
+  { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 function AppLayout() {
