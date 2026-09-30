@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,9 +29,9 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
     enabled: !!companyId,
     queryFn: async () => {
       const [c, contacts, acts] = await Promise.all([
-        supabase.from("companies").select("*").eq("id", companyId!).single(),
-        supabase.from("contacts").select("id, full_name, job_title, email, status").eq("company_id", companyId!).order("full_name"),
-        supabase
+        renderDb.from("companies").select("*").eq("id", companyId!).single(),
+        renderDb.from("contacts").select("id, full_name, job_title, email, status").eq("company_id", companyId!).order("full_name"),
+        renderDb
           .from("activities")
           .select("id, type, body, created_at, created_by, contact_id")
           .eq("company_id", companyId!)
@@ -44,7 +44,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
       const authorIds = [...new Set(acts.data.map((a) => a.created_by))];
       const names: Record<string, string> = {};
       if (authorIds.length) {
-        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", authorIds);
+        const { data: profs } = await renderDb.from("profiles").select("id, full_name").in("id", authorIds);
         for (const p of profs ?? []) names[p.id] = p.full_name || "Unnamed member";
       }
       return { company: c.data, contacts: contacts.data, activities: acts.data, names };
@@ -59,7 +59,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
   };
 
   async function changeStatus(status: string) {
-    const { error } = await supabase.from("companies").update({ status }).eq("id", companyId!);
+    const { error } = await renderDb.from("companies").update({ status }).eq("id", companyId!);
     if (error) return toast.error(friendlyError(error));
     toast.success("Status updated");
     refresh();
@@ -69,7 +69,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
     e.preventDefault();
     if (!body.trim()) return toast.error("Write something first.");
     setBusy(true);
-    const { error } = await supabase.from("activities").insert({
+    const { error } = await renderDb.from("activities").insert({
       organization_id: ws.organizationId,
       company_id: companyId!,
       contact_id: contactId === NO_CONTACT ? null : contactId,
