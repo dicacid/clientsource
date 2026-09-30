@@ -244,6 +244,7 @@ export const researchSpaIndustry = createServerFn({ method: "POST" })
     region: z.string().min(2).max(200).default("Australia"),
     focus: z.string().min(2).max(300),
     businessContext,
+    purpose: z.enum(["industry","opportunity-radar"]).default("industry"),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const profile = BUSINESS_CONTEXTS[data.businessContext];
@@ -764,7 +765,7 @@ Rules:
 
     await saveResearchRun(context.organizationId, {
       query: `${data.industry} · ${data.region} · ${data.focus}`,
-      researchType: "industry-staged",
+      researchType: data.purpose === "opportunity-radar" ? "opportunity-radar" : "industry-staged",
       businessContext: data.businessContext,
       researchedAt: response.researchedAt,
       modelUsed: discovery.modelUsed,
