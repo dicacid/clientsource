@@ -1,273 +1,78 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Copy, Pencil, Trash2 } from "lucide-react";
-import { renderDb } from "@/integrations/render/client";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useState, type FormEvent } from "react";
+import { ExternalLink, Factory, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CONTACT_STATUSES, localDate } from "@/lib/constants";
-import { friendlyError } from "@/lib/errors";
-import { useWorkspace } from "@/lib/workspace";
-import { downloadCsv, toCsv } from "@/lib/csv";
-import { ConfirmDelete, EmptyState, OptionSelect, PageHeader, StatusBadge } from "@/components/crm/shared";
-import { ContactForm, type ContactRow } from "@/components/crm/ContactForm";
+import { researchSpaIndustry } from "@/lib/spa/research.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/contacts")({
-  head: () => ({
-    meta: [
-      { title: "Contacts — Prospect Finder B2B" },
-      { name: "description", content: "People at your target companies and their follow-ups." },
-      { property: "og:title", content: "Contacts — Prospect Finder B2B" },
-      { property: "og:description", content: "People at your target companies and their follow-ups." },
-    ],
-  }),
-  component: Contacts,
+  head: () => ({ meta: [{ title: "Industries — SPA Intelligence" }] }),
+  component: IndustryIntelligence,
 });
 
-const PAGE = 25;
-type Row = ContactRow & { companies: { name: string; website: string | null } | null };
+function IndustryIntelligence() {
+  const research = useServerFn(researchSpaIndustry);
+  const navigate = useNavigate();
+  const [industry, setIndustry] = useState("Mining");
+  const [region, setRegion] = useState("Australia");
+  const [focus, setFocus] = useState("Remote Power / BESS");
+  const [data, setData] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-function Contacts() {
-  const ws = useWorkspace();
-  const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [overdue, setOverdue] = useState(false);
-  const [page, setPage] = useState(0);
-  const [editing, setEditing] = useState<ContactRow | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const today = localDate();
-  const hasFilters = !!search || !!status || overdue;
-
-  function buildQuery(withCount: boolean) {
-    let q = renderDb
-      .from("contacts")
-      .select("*, companies(name, website)", withCount ? { count: "exact" } : undefined)
-      .eq("organization_id", ws.organizationId);
-    if (search.trim()) q = q.ilike("full_name", `%${search.trim()}%`);
-    if (status) q = q.eq("status", status);
-    if (overdue) q = q.lt("next_follow_up", today).not("status", "in", "(customer,lost)");
-    return q.order(overdue ? "next_follow_up" : "created_at", { ascending: overdue }).order("id");
+  async function run(e: FormEvent) {
+    e.preventDefault(); setBusy(true); setError(null);
+    try { setData(await research({ data: { industry, region, focus, businessContext: "spa" } })); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setBusy(false); }
   }
 
-  const q = useQuery({
-    queryKey: ["contacts", ws.organizationId, search, status, overdue, today, page],
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const { data, error, count } = await buildQuery(true).range(page * PAGE, page * PAGE + PAGE - 1);
-      if (error) throw error;
-      return { rows: data as unknown as Row[], count: count ?? 0 };
-    },
-  });
-
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["contacts"] });
-    qc.invalidateQueries({ queryKey: ["dashboard"] });
-    qc.invalidateQueries({ queryKey: ["company-detail"] });
-  };
-
-  async function del(c: ContactRow) {
-    const { error } = await renderDb.from("contacts").delete().eq("id", c.id);
-    if (error) return toast.error(friendlyError(error));
-    toast.success("Contact deleted");
-    refresh();
+  function convert(org: any) {
+    localStorage.setItem("spa-intelligence.prospect.prefill", org.website || org.name);
+    navigate({ to: "/prospect" });
   }
-
-  async function copy(email: string) {
-    try {
-      await navigator.clipboard.writeText(email);
-      toast.success("Email copied");
-    } catch {
-      toast.error("Couldn't access the clipboard");
-    }
-  }
-
-  async function exportCsv() {
-    const { data, error } = await buildQuery(false).limit(10000);
-    if (error) return toast.error(friendlyError(error));
-    const cols = ["full_name", "job_title", "email", "phone", "company_name", "company_website", "status", "next_follow_up", "notes"];
-    const rows = (data as unknown as Row[]).map((r) => ({
-      ...r,
-      company_name: r.companies?.name ?? "",
-      company_website: r.companies?.website ?? "",
-    }));
-    downloadCsv(`contacts-${today}.csv`, toCsv(cols, rows));
-    toast.success(`Exported ${rows.length} contacts`);
-  }
-
-  const total = q.data?.count ?? 0;
-  const pages = Math.max(1, Math.ceil(total / PAGE));
 
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader
-        title="Contacts"
-        sub={`${total} matching`}
-        actions={
-          <>
-            <Button variant="outline" onClick={exportCsv}>
-              Export CSV
-            </Button>
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setFormOpen(true);
-              }}
-            >
-              Add contact
-            </Button>
-          </>
-        }
-      />
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
-          placeholder="Search name…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
-          className="max-w-xs"
-          aria-label="Search contacts"
-        />
-        <OptionSelect
-          value={status}
-          onChange={(v) => {
-            setStatus(v);
-            setPage(0);
-          }}
-          options={CONTACT_STATUSES}
-          placeholder="Any status"
-          allowAny
-          className="w-40"
-        />
-        <div className="flex items-center gap-2">
-          <Switch
-            id="overdue"
-            checked={overdue}
-            onCheckedChange={(v) => {
-              setOverdue(v);
-              setPage(0);
-            }}
-          />
-          <Label htmlFor="overdue">Overdue follow-ups (before {today})</Label>
-        </div>
-        {hasFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearch("");
-              setStatus("");
-              setOverdue(false);
-              setPage(0);
-            }}
-          >
-            Clear filters
-          </Button>
-        )}
-      </div>
+      <header className="mb-7 border-b border-border pb-5">
+        <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">Commercial intelligence / market lens</div>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Industry Intelligence</h1>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Investigate a market instead of a single organisation, then convert any supported organisation into the full prospect workflow.</p>
+      </header>
 
-      {q.isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-10" />
-          ))}
-        </div>
-      ) : q.error ? (
-        <p className="text-destructive">{friendlyError(q.error)}</p>
-      ) : q.data!.rows.length === 0 ? (
-        hasFilters ? (
-          <EmptyState title="No contacts match these filters." />
-        ) : (
-          <EmptyState title="No contacts yet." action={<Button onClick={() => setFormOpen(true)}>Add contact</Button>} />
-        )
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Next follow-up</TableHead>
-                  <TableHead className="w-32" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {q.data!.rows.map((c) => {
-                  const isOverdue = c.next_follow_up && c.next_follow_up < today && !["customer", "lost"].includes(c.status);
-                  return (
-                    <TableRow key={c.id}>
-                      <TableCell>
-                        <div className="font-medium">{c.full_name}</div>
-                        {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
-                      </TableCell>
-                      <TableCell>{c.companies?.name ?? "—"}</TableCell>
-                      <TableCell>{c.job_title ?? "—"}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={c.status} />
-                      </TableCell>
-                      <TableCell className={`font-mono text-xs ${isOverdue ? "text-destructive" : ""}`}>{c.next_follow_up ?? "—"}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {c.email && (
-                            <Button size="icon" variant="ghost" aria-label={`Copy email of ${c.full_name}`} onClick={() => copy(c.email!)}>
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Edit ${c.full_name}`}
-                            onClick={() => {
-                              setEditing(c);
-                              setFormOpen(true);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <ConfirmDelete
-                            title={`Delete ${c.full_name}?`}
-                            description="Activities that mention this contact are kept, without the contact link."
-                            onConfirm={() => del(c)}
-                            trigger={
-                              <Button size="icon" variant="ghost" aria-label={`Delete ${c.full_name}`}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            }
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+      <form onSubmit={run} className="grid gap-4 border border-border bg-card p-4 md:grid-cols-[1fr_1fr_1fr_auto]">
+        <label className="text-xs text-muted-foreground">Industry<Input value={industry} onChange={(e) => setIndustry(e.target.value)} className="mt-1.5 text-foreground" /></label>
+        <label className="text-xs text-muted-foreground">Region<Input value={region} onChange={(e) => setRegion(e.target.value)} className="mt-1.5 text-foreground" /></label>
+        <label className="text-xs text-muted-foreground">Opportunity / technology focus<Input value={focus} onChange={(e) => setFocus(e.target.value)} className="mt-1.5 text-foreground" /></label>
+        <Button type="submit" disabled={busy || !industry.trim() || !region.trim() || !focus.trim()} className="self-end"><Factory className="mr-2 h-4 w-4" />{busy ? "Researching…" : "Research market"}</Button>
+      </form>
+
+      {busy && <div className="mt-4 border border-primary/30 bg-primary/5 p-3 text-sm text-muted-foreground">Searching current public companies, projects, announcements and tender signals for this market filter.</div>}
+      {error && <div className="mt-4 border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
+
+      {data && <div className="mt-6 space-y-5">
+        <section className="border border-border bg-card">
+          <div className="border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Relevant organisations</div>
+          <div className="divide-y divide-border">
+            {(data.organisations ?? []).map((o: any, i: number) => <article key={i} className="flex flex-wrap items-start justify-between gap-4 p-4">
+              <div className="max-w-3xl"><h3 className="font-semibold">{o.name}</h3><p className="mt-1 text-xs text-muted-foreground">{o.location || "Location not stated"}</p><p className="mt-2 text-sm">{o.why_relevant}</p><a href={o.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">Evidence <ExternalLink className="h-3 w-3" /></a></div>
+              <Button size="sm" variant="outline" onClick={() => convert(o)}><Target className="mr-1 h-3.5 w-3.5" />Convert to prospect</Button>
+            </article>)}
           </div>
-          <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-            <span>
-              Page {page + 1} of {pages}
-            </span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                Previous
-              </Button>
-              <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-      <ContactForm open={formOpen} onOpenChange={setFormOpen} contact={editing} onSaved={refresh} />
+        </section>
+
+        <section className="border border-border bg-card">
+          <div className="border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Projects / signals</div>
+          <div className="divide-y divide-border">{(data.signals ?? []).map((s: any, i: number) => <article key={i} className="p-4"><div className="flex flex-wrap justify-between gap-3"><div><strong>{s.organisation}</strong><div className="font-mono text-[10px] uppercase text-muted-foreground">{s.location || "Location not stated"}{s.evidence_date ? ` · ${s.evidence_date}` : ""}</div></div><a href={s.source_url} target="_blank" rel="noreferrer" className="text-xs text-primary">Evidence ↗</a></div><p className="mt-2 text-sm">{s.signal}</p><p className="mt-2 border-l-2 border-primary/50 pl-3 text-sm text-muted-foreground"><strong className="text-foreground">Potential SPA fit:</strong> {s.spa_fit}</p><div className="mt-2 font-mono text-[10px] uppercase text-amber-300">{s.classification}</div></article>)}</div>
+        </section>
+
+        {!!data.tenders?.length && <section className="border border-border bg-card"><div className="border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Tender intelligence</div><div className="divide-y divide-border">{data.tenders.map((t: any, i: number) => <article key={i} className="p-4"><strong>{t.title}</strong><p className="mt-1 text-xs text-muted-foreground">{t.issuer} · Ref {t.reference || "not published"} · Closing {t.closing_date || "not found"} · {t.location || "Location not stated"}</p><p className="mt-2 text-sm text-muted-foreground">{t.spa_fit}</p><a href={t.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary">Original source ↗</a></article>)}</div></section>}
+
+        <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}</div>
+      </div>}
+
+      {!data && !busy && !error && <div className="mt-8 grid min-h-48 place-items-center border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Defaults are loaded for the required demo test: Mining · Australia · Remote Power / BESS.</div>}
     </div>
   );
 }
