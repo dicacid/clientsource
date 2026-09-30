@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireRenderMember } from "@/integrations/render/auth-middleware";
 import { fetchPage, htmlToText, hostOf, rankedLinks } from "@/lib/prospect/web.server";
 import { BUSINESS_CONTEXTS, capabilityText } from "./capabilities";
+import { diagnosePublicPage } from "./fetch-diagnostic.server";
 import { getAiRuntime } from "./openrouter.server";
 
 type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number | string };
@@ -64,30 +65,45 @@ function normalizeQueryDomain(input: string): string | null {
 }
 
 async function directWebsiteContext(domain: string | null) {
-  if (!domain) return { status: "not_provided", pages: [] as { url: string; text: string }[], message: "No direct website URL/domain was supplied." };
-  const homeUrl = "https://" + domain;
-  try {
-    const home = await fetchPage(homeUrl, 10000);
-    if (!home) {
-      return { status: "unavailable", pages: [] as { url: string; text: string }[], message: "Direct retrieval did not return usable HTML. Research can continue using indexed public sources." };
-    }
-    const links = rankedLinks(home.html, home.url, ["projects","project","news","about","services","solutions","energy","battery","solar","contact","team"], 6);
-    const more = (await Promise.all(links.map((u) => fetchPage(u, 8000)))).filter(Boolean) as { url: string; html: string }[];
-    const uniq = [home, ...more].filter((p, i, arr) => arr.findIndex((q) => q.url === p.url) === i);
+  if (!domain) {
     return {
-      status: "ok",
-      pages: uniq.map((p) => ({ url: p.url, text: htmlToText(p.html, 4500) })),
-      message: `Read ${uniq.length} public page${uniq.length === 1 ? "" : "s"} directly.`,
+      status: "not_provided",
+      pages: [] as { url: string; text: string }[],
+      message: "No direct website URL/domain was supplied.",
+      diagnostic: null,
     };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    let category = "upstream_fetch_failure";
-    if (/dns|enotfound|getaddrinfo/i.test(message)) category = "dns";
-    else if (/certificate|tls|ssl/i.test(message)) category = "tls";
-    else if (/timeout|abort/i.test(message)) category = "timeout";
-    else if (/redirect/i.test(message)) category = "redirect";
-    return { status: category, pages: [] as { url: string; text: string }[], message };
   }
+  const homeUrl = "https://" + domain;
+  const diagnostic = await diagnosePublicPage(homeUrl, 12000);
+  if (!diagnostic.ok || !diagnostic.html) {
+    return {
+      status: diagnostic.category,
+      pages: [] as { url: string; text: string }[],
+      message: diagnostic.message + " Research continued using other legitimate public sources.",
+      diagnostic: {
+        category: diagnostic.category,
+        httpStatus: diagnostic.httpStatus,
+        contentType: diagnostic.contentType,
+        url: diagnostic.url,
+      },
+    };
+  }
+
+  const home = { url: diagnostic.url, html: diagnostic.html };
+  const links = rankedLinks(home.html, home.url, ["projects","project","news","about","services","solutions","energy","battery","solar","contact","team"], 6);
+  const more = (await Promise.all(links.map((u) => fetchPage(u, 8000)))).filter(Boolean) as { url: string; html: string }[];
+  const uniq = [home, ...more].filter((p, i, arr) => arr.findIndex((q) => q.url === p.url) === i);
+  return {
+    status: "ok",
+    pages: uniq.map((p) => ({ url: p.url, text: htmlToText(p.html, 4500) })),
+    message: `Direct public HTML retrieval succeeded. Read ${uniq.length} public page${uniq.length === 1 ? "" : "s"}.`,
+    diagnostic: {
+      category: diagnostic.category,
+      httpStatus: diagnostic.httpStatus,
+      contentType: diagnostic.contentType,
+      url: diagnostic.url,
+    },
+  };
 }
 
 const businessContext = z.enum(["spa","solaronline","elmofo"]).default("spa");
