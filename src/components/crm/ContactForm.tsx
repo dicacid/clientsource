@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +43,7 @@ export function useCompanyOptions() {
   return useQuery({
     queryKey: ["company-options", ws.organizationId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await renderDb
         .from("companies")
         .select("id, name")
         .eq("organization_id", ws.organizationId)
@@ -116,8 +116,8 @@ export function ContactForm({
     };
     setBusy(true);
     const { error } = contact
-      ? await supabase.from("contacts").update(payload).eq("id", contact.id)
-      : await supabase.from("contacts").insert({ ...payload, organization_id: ws.organizationId });
+      ? await renderDb.from("contacts").update(payload).eq("id", contact.id)
+      : await renderDb.from("contacts").insert({ ...payload, organization_id: ws.organizationId });
     setBusy(false);
     if (error) return toast.error(friendlyError(error));
     toast.success(contact ? "Contact saved" : "Contact added");
