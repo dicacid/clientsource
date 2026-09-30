@@ -748,3 +748,18 @@ export async function datastoreHealth() {
   if (readBack !== probeValue) throw new Error("Render datastore write/read verification failed.");
   return { ok: true as const, datastore: "render-key-value" as const };
 }
+
+
+export async function userIdByEmail(email: string): Promise<string | null> {
+  const state = await readState();
+  return state.users.find((user) => user.email === normalizeEmail(email))?.id ?? null;
+}
+
+export async function resetPasswordForUser(userId: string, password: string): Promise<void> {
+  if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+  await mutateState((state) => {
+    const user = state.users.find((candidate) => candidate.id === userId);
+    if (!user) throw new Error("Reset link is invalid or has expired.");
+    user.password_hash = hashPassword(password);
+  });
+}
