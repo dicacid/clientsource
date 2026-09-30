@@ -36,7 +36,7 @@ function OpportunityRadar() {
   }, []);
 
   async function run() {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setData(null);
     try {
       setData(await scan({ data: { industry: "Mining, resources and remote industrial infrastructure", region: "Australia", focus: "Remote power, BESS, hybrid energy, diesel displacement, electrification and industrial solar", businessContext: "spa", purpose: "opportunity-radar" } }));
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }

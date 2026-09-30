@@ -1,3 +1,4 @@
+import { requestJsonResponse } from "./json-response.server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireRenderMember } from "@/integrations/render/auth-middleware";
@@ -10,130 +11,12 @@ import { competitorRegistry, getCapabilityProfile, mergeCompetitorDiscovery, sav
 
 type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number | string };
 
-function parseJson<T>(text: string): T {
-  const cleaned = text.trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/, "").trim();
-  const candidates = [cleaned];
-  const first = cleaned.indexOf("{");
-  const last = cleaned.lastIndexOf("}");
-  if (first >= 0 && last > first) candidates.push(cleaned.slice(first, last + 1));
-
-  let lastError: unknown = null;
-  for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate) as T;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("The selected model returned malformed JSON.");
-}
-
-async function repairResearchJson<T>(orgId: string, raw: string): Promise<T> {
-  try {
-    return await aiJsonForOrg<T>(
-      orgId,
-      `You are a strict JSON repair utility inside SPA Intelligence.
-The input came from a research model and is intended to be one JSON object, but it may contain a missing comma, broken array separator, stray markdown fence or other JSON syntax defect.
-Repair syntax only. Preserve the existing facts, URLs, strings, arrays and object structure. Do not research, infer, add, remove or rewrite factual content. Return one valid JSON object only.`,
-      `Repair this malformed JSON and return the corrected JSON object:\n\n${raw.slice(0, 24000)}`,
-      "low",
-    );
-  } catch (error) {
-    console.error("[SPA Intelligence] JSON repair failed", error);
-    throw new Error("The research provider returned malformed structured data twice. Nothing was saved. Retry the scan.");
-  }
-}
-
 async function openRouterResearch<T>(orgId: string, system: string, user: string): Promise<{ data: T; modelUsed: string; usage: Usage | null }> {
   const runtime = await getAiRuntime(orgId);
-  const messages = [
-    { role: "system", content: system + "\nReturn exactly one JSON object. No markdown fences." },
-    { role: "user", content: user },
-  ];
-
-  async function send(useJsonMode: boolean) {
-    return fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + runtime.apiKey,
-        "X-Title": "SPA Intelligence",
-      },
-      body: JSON.stringify({
-        model: runtime.model,
-        messages,
-        max_tokens: 3500,
-        temperature: 0.2,
-        ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
-        tools: [
-          {
-            type: "openrouter:web_search",
-            parameters: {
-              engine: "parallel",
-              max_results: 4,
-              max_total_results: 8,
-              search_context_size: "medium",
-            },
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(180000),
-    });
-  }
-
-  let response: Response;
-  try {
-    response = await send(true);
-    if (response.status === 400) {
-      const rejected = await response.text().catch(() => "");
-      if (/response[_ -]?format|json mode|structured/i.test(rejected)) {
-        response = await send(false);
-      } else {
-        throw new Error(rejected || "OpenRouter rejected the research request.");
-      }
-    }
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    if (name === "TimeoutError" || name === "AbortError") {
-      throw new Error(
-        `Research exceeded 180 seconds using ${runtime.model}. Retry once, or choose a faster model in AI & Models.`,
-      );
-    }
-    throw error;
-  }
-
-  const body = await response.text();
-  if (!response.ok) {
-    let message = `OpenRouter returned HTTP ${response.status}.`;
-    try { message = JSON.parse(body)?.error?.message ?? message; } catch {}
-    if (response.status === 401) message = "The saved OpenRouter API key was rejected. Reconnect it in AI & Models.";
-    if (response.status === 402) message = "The OpenRouter account has insufficient credits.";
-    if (response.status === 429) message = "OpenRouter rate-limited this research request. Retry shortly.";
-    throw new Error(message);
-  }
-
-  const json = JSON.parse(body) as any;
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenRouter returned no research content.");
-
-  const raw = String(content);
-  let data: T;
-  try {
-    data = parseJson<T>(raw);
-  } catch (error) {
-    console.warn("[SPA Intelligence] Research JSON was malformed, attempting automatic repair", {
-      model: String(json.model ?? runtime.model),
-      message: error instanceof Error ? error.message : String(error),
-      preview: raw.slice(0, 600),
-    });
-    data = await repairResearchJson<T>(orgId, raw);
-  }
-
-  return {
-    data,
-    modelUsed: String(json.model ?? runtime.model),
-    usage: json.usage ?? null,
-  };
+  return requestJsonResponse<T>({ ...runtime, system, user, tools: [{
+    type: "openrouter:web_search",
+    parameters: { engine: "parallel", max_results: 4, max_total_results: 8, search_context_size: "medium" },
+  }] });
 }
 
 function normalizeQueryDomain(input: string): string | null {
@@ -648,18 +531,20 @@ Opportunity focus: ${data.focus}
 Business lens: ${profile.lens}
 
 Find:
-- 8 to 12 organisations that are genuinely relevant.
-- up to 8 current external project / expansion / energy / infrastructure signals.
-- up to 5 documented tenders or procurement notices, only if actually found.
+- up to 8 organisations that are genuinely relevant. Fewer supported matches are preferable to unrelated padding.
+- up to 5 current external project / expansion / energy / infrastructure signals.
+- up to 3 documented tenders or procurement notices, only if actually found.
 
 Return JSON:
 {
-  "organisations":[{"name":"","website":"https://..."|null,"location":"","why_relevant":"","source_url":"https://..."}],
+  "organisations":[{"name":"","website":"https://...","location":"","why_relevant":"","source_url":"https://..."}],
   "external_signals":[{"organisation":"","signal":"","location":"","evidence_date":null,"source_url":"https://..."}],
   "tenders":[{"title":"","issuer":"","reference":null,"closing_date":null,"location":"","source_url":"https://...","why_relevant":""}]
 }
 
-Do not perform long strategic analysis in this stage. Discovery and evidence only.`,
+Do not perform long strategic analysis in this stage. Discovery and evidence only.
+Return potential buyers, project owners or operators for the requested industry. Do not substitute energy suppliers or competing equipment vendors unless the requested industry explicitly includes them. Match the requested industry and region before assessing energy fit.
+Keep each why_relevant and signal to at most two concise sentences. Never pad the result count.`,
     );
 
     const rawCandidates = (discovery.data.organisations ?? [])
@@ -730,7 +615,7 @@ ${JSON.stringify(externalSignals)}
 
 Return JSON:
 {
-  "organisations":[{"name":"","website":"https://..."|null,"location":"","why_relevant":"","source_url":"https://..."}],
+  "organisations":[{"name":"","website":"https://...","location":"","why_relevant":"","source_url":"https://..."}],
   "signals":[{"organisation":"","signal":"","location":"","evidence_date":null,"source_url":"https://...","spa_fit":"","classification":"OBSERVED_FACT|SOURCE_CLAIM|INFERENCE"}],
   "market_notes":["..."]
 }
@@ -862,7 +747,7 @@ Never invent people, partnerships, projects, dates or technology claims.`,
 Return concise JSON:
 {
   "organisation":"",
-  "official_website":"https://..."|null,
+  "official_website":"https://...",
   "current_signals":[{"item":"","source_url":"https://...","evidence_date":null}],
   "people":[{"name":"","title":"","source_url":"https://..."}],
   "partnerships":[{"item":"","source_url":"https://...","evidence_date":null}]

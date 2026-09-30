@@ -37,7 +37,7 @@ function IndustryIntelligence() {
   }, []);
 
   async function run(e: FormEvent) {
-    e.preventDefault(); setBusy(true); setError(null);
+    e.preventDefault(); setBusy(true); setError(null); setData(null);
     try { setData(await research({ data: { industry, region, focus, businessContext: "spa", purpose: "industry" } })); }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setBusy(false); }
@@ -87,7 +87,7 @@ function IndustryIntelligence() {
         <div className="font-mono text-[10px] text-muted-foreground">Model used: {data.modelUsed} · Research: {new Date(data.researchedAt).toLocaleString()}{data.verification ? ` · Verified live organisations: ${data.verification.verifiedLiveOrganisations}/${data.verification.discoveredOrganisations}` : ""}</div>
       </div>}
 
-      {!data && !busy && !error && <div className="mt-8 grid min-h-48 place-items-center border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Defaults are loaded for the required demo test: Mining · Australia · Remote Power / BESS.</div>}
+      {!data && !busy && !error && <div className="mt-8 grid min-h-48 place-items-center border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Choose an industry and opportunity focus, then research the market.</div>}
     </div>
   );
 }
