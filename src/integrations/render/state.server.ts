@@ -1,7 +1,7 @@
 import { createClient, type RedisClientType } from "redis";
 import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 
-const STATE_KEY = "clientsource:state:v1";
+const STATE_KEY = process.env["STATE_KEY"] || "spa-intelligence:state:v1";
 
 type Role = "owner" | "admin" | "member";
 type User = { id: string; email: string; password_hash: string; created_at: string };
@@ -143,7 +143,7 @@ async function redis(): Promise<RedisClientType> {
     const url = process.env["REDIS_URL"];
     if (!url) throw new Error("REDIS_URL is not configured.");
     const next = createClient({ url });
-    next.on("error", (error) => console.error("[ClientSource datastore]", error));
+    next.on("error", (error) => console.error("[SPA Intelligence datastore]", error));
     connectPromise = next.connect().then(() => {
       client = next as RedisClientType;
       return client;
@@ -160,7 +160,7 @@ async function readState(): Promise<State> {
     const parsed = JSON.parse(raw) as Partial<State>;
     return { ...emptyState(), ...parsed } as State;
   } catch {
-    throw new Error("ClientSource datastore is unreadable.");
+    throw new Error("SPA Intelligence datastore is unreadable.");
   }
 }
 
