@@ -27,7 +27,7 @@ If a secret is committed, deleting it later is not enough. Rotate the credential
 - Session bearer tokens are currently stored in browser local storage. XSS could expose them.
 - Workspace invites are matched by email without built-in email verification.
 - State mutation serialization is process-local and assumes one app instance.
-- The website reader follows outbound HTTP redirects and needs stronger SSRF/DNS-rebinding protection before untrusted public use.
+- The website reader blocks private/local destinations and validates redirect targets. DNS rebinding remains a defense-in-depth concern for hostile multi-tenant environments.
 - No independent security audit has been completed.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

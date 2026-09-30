@@ -1,11 +1,74 @@
 // Server-only public-website reader. Fetches a few public pages; never logs in or bypasses anything.
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 const UA = "Mozilla/5.0 (compatible; ProspectFinderB2B/1.0)";
+const MAX_REDIRECTS = 4;
+
+function privateAddress(address: string): boolean {
+  const ip = address.toLowerCase();
+  if (ip.includes(":")) {
+    if (ip === "::" || ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb") || ip.startsWith("ff")) return true;
+    const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+    return mapped ? privateAddress(mapped) : false;
+  }
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((x) => !Number.isInteger(x) || x < 0 || x > 255)) return true;
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+async function publicUrl(raw: string): Promise<URL> {
+  const url = new URL(raw);
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only public HTTP(S) URLs are allowed.");
+  if (url.username || url.password) throw new Error("Credential-bearing URLs are not allowed.");
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) {
+    throw new Error("Local network destinations are not allowed.");
+  }
+  if (isIP(hostname)) {
+    if (privateAddress(hostname)) throw new Error("Private network destinations are not allowed.");
+    return url;
+  }
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some((entry) => privateAddress(entry.address))) {
+    throw new Error("Private or unresolved network destinations are not allowed.");
+  }
+  return url;
+}
+
+async function safeFetch(raw: string, signal: AbortSignal, accept: string): Promise<Response> {
+  let url = await publicUrl(raw);
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+    const res = await fetch(url, {
+      signal,
+      redirect: "manual",
+      headers: { "User-Agent": UA, Accept: accept },
+    });
+    if (![301, 302, 303, 307, 308].includes(res.status)) return res;
+    if (redirects === MAX_REDIRECTS) throw new Error("Too many redirects.");
+    const location = res.headers.get("location");
+    if (!location) return res;
+    url = await publicUrl(new URL(location, url).toString());
+  }
+  throw new Error("Too many redirects.");
+}
 
 export async function fetchPage(url: string, timeoutMs = 7000): Promise<{ url: string; html: string } | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: "follow", headers: { "User-Agent": UA, Accept: "text/html" } });
+    const res = await safeFetch(url, ctrl.signal, "text/html");
     if (!res.ok) return null;
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("html")) return null;
@@ -107,7 +170,7 @@ export async function fetchText(url: string, timeoutMs = 5000, max = 8000): Prom
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, redirect: "follow", headers: { "User-Agent": UA, Accept: "text/plain" } });
+    const res = await safeFetch(url, ctrl.signal, "text/plain");
     if (!res.ok) return null;
     const ct = res.headers.get("content-type") ?? "";
     if (ct.includes("html")) return null;

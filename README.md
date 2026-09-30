@@ -145,7 +145,7 @@ The app exposes `/health`, which performs a real datastore write/read/delete pro
 - Sessions currently use a signed bearer token in browser local storage. Moving to HttpOnly cookies is a planned hardening change.
 - Invites are email-matched but there is no built-in email verification yet.
 - “Domestic” prospecting currently means Australia.
-- Public-site fetching needs stronger SSRF/private-network protection before untrusted public use.
+- Public-site fetching rejects local/private/link-local destinations and validates every redirect before following it. A hardened custom DNS transport is still recommended for high-risk multi-tenant deployments.
 
 See [roadmap.md](roadmap.md).
 
