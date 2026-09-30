@@ -11,6 +11,7 @@ import {
 } from "./state.server";
 import { requireRenderUser } from "./auth-middleware";
 import { clearSessionCookie, setSessionCookie } from "./session.server";
+import { confirmPasswordReset, requestPasswordReset } from "./password-reset.server";
 
 const authSchema = z.discriminatedUnion("action", [
   z.object({
@@ -70,3 +71,24 @@ export const rpcRequest = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => executeRpc(context.userId, data.fn, data.args));
+
+
+export const requestPasswordResetRequest = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ email: z.string().email() }).parse(data))
+  .handler(async ({ data }) => {
+    await requestPasswordReset(data.email);
+    return { ok: true };
+  });
+
+export const confirmPasswordResetRequest = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z.object({
+      token: z.string().min(20),
+      password: z.string().min(8),
+    }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    await confirmPasswordReset(data.token, data.password);
+    clearSessionCookie();
+    return { ok: true };
+  });
