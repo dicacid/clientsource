@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { resolveMembership, signOut } from "@/lib/session";
 import { friendlyError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ function Onboarding() {
     e.preventDefault();
     if (!name.trim()) return toast.error("Workspace name is required.");
     setBusy(true);
-    const { error } = await supabase.rpc("create_workspace", { org_name: name.trim() });
+    const { error } = await renderDb.rpc("create_workspace", { org_name: name.trim() });
     setBusy(false);
     if (error) return toast.error(friendlyError(error));
     toast.success("Workspace created");
