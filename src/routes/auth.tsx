@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +38,7 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { error } = await renderDb.auth.signUp({
           email: email.trim(),
           password,
           options: { emailRedirectTo: window.location.origin, data: { full_name: fullName.trim() } },
@@ -47,7 +47,7 @@ function AuthPage() {
         setInfo("Check your inbox and confirm your email, then sign in here.");
         setMode("signin");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        const { error } = await renderDb.auth.signInWithPassword({ email: email.trim(), password });
         if (error) {
           if (/not confirmed/i.test(error.message)) {
             setError("Confirm your email, then sign in again.");
