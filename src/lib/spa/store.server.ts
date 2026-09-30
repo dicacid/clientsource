@@ -23,6 +23,7 @@ async function redis(): Promise<RedisClientType> {
 const historyKey = (orgId: string) => `spa-intelligence:history:v1:${orgId}`;
 const approvalKey = (orgId: string) => `spa-intelligence:approvals:v1:${orgId}`;
 const capabilityKey = (orgId: string) => `spa-intelligence:capabilities:v1:${orgId}`;
+const competitorKey = (orgId: string) => `spa-intelligence:competitors:v1:${orgId}`;
 
 export type ResearchRunRecord = {
   id: string;
@@ -124,4 +125,106 @@ export async function saveCapabilityProfile(orgId: string, value: string) {
   const r = await redis();
   await r.set(capabilityKey(orgId), text);
   return text;
+}
+
+
+export type CompetitorRecord = {
+  id: string;
+  name: string;
+  website: string | null;
+  location: string | null;
+  category: "direct" | "adjacent" | "large-scale";
+  whyCompetitor: string;
+  overlapAreas: string[];
+  sourceUrls: string[];
+  discoveredAt: string;
+  updatedAt: string;
+  lastAnalysedAt: string | null;
+  analysis: unknown | null;
+};
+
+async function readCompetitors(orgId: string): Promise<CompetitorRecord[]> {
+  const r = await redis();
+  const raw = await r.get(competitorKey(orgId));
+  if (!raw) return [];
+  try {
+    const rows = JSON.parse(raw) as CompetitorRecord[];
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeCompetitors(orgId: string, rows: CompetitorRecord[]) {
+  const r = await redis();
+  await r.set(competitorKey(orgId), JSON.stringify(rows.slice(0, 100)));
+}
+
+function competitorIdentity(name: string, website: string | null) {
+  const site = (website || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+  return site || name.trim().toLowerCase();
+}
+
+export async function competitorRegistry(orgId: string) {
+  return readCompetitors(orgId);
+}
+
+export async function mergeCompetitorDiscovery(
+  orgId: string,
+  discovered: Array<Omit<CompetitorRecord, "id" | "discoveredAt" | "updatedAt" | "lastAnalysedAt" | "analysis">>,
+) {
+  const current = await readCompetitors(orgId);
+  const now = new Date().toISOString();
+
+  for (const item of discovered) {
+    const key = competitorIdentity(item.name, item.website);
+    const existing = current.find((row) => competitorIdentity(row.name, row.website) === key);
+
+    if (existing) {
+      existing.name = item.name;
+      existing.website = item.website;
+      existing.location = item.location;
+      existing.category = item.category;
+      existing.whyCompetitor = item.whyCompetitor;
+      existing.overlapAreas = item.overlapAreas;
+      existing.sourceUrls = [...new Set([...(existing.sourceUrls ?? []), ...item.sourceUrls])].slice(0, 12);
+      existing.updatedAt = now;
+    } else {
+      current.push({
+        id: randomUUID(),
+        ...item,
+        discoveredAt: now,
+        updatedAt: now,
+        lastAnalysedAt: null,
+        analysis: null,
+      });
+    }
+  }
+
+  current.sort((a, b) => {
+    const rank = { direct: 0, adjacent: 1, "large-scale": 2 } as const;
+    return rank[a.category] - rank[b.category] || a.name.localeCompare(b.name);
+  });
+
+  await writeCompetitors(orgId, current);
+  return current;
+}
+
+export async function saveCompetitorAnalysis(orgId: string, competitorId: string, analysis: unknown) {
+  const rows = await readCompetitors(orgId);
+  const row = rows.find((item) => item.id === competitorId);
+  if (!row) throw new Error("Competitor record not found.");
+  const now = new Date().toISOString();
+  row.analysis = analysis;
+  row.lastAnalysedAt = now;
+  row.updatedAt = now;
+  await writeCompetitors(orgId, rows);
+  return row;
+}
+
+export async function removeCompetitor(orgId: string, competitorId: string) {
+  const rows = await readCompetitors(orgId);
+  const next = rows.filter((item) => item.id !== competitorId);
+  await writeCompetitors(orgId, next);
+  return next;
 }
