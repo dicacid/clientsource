@@ -12,11 +12,35 @@ type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?
 
 function parseJson<T>(text: string): T {
   const cleaned = text.trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/, "").trim();
-  try { return JSON.parse(cleaned) as T; } catch {
-    const first = cleaned.indexOf("{");
-    const last = cleaned.lastIndexOf("}");
-    if (first >= 0 && last > first) return JSON.parse(cleaned.slice(first, last + 1)) as T;
-    throw new Error("The selected model returned an unreadable response.");
+  const candidates = [cleaned];
+  const first = cleaned.indexOf("{");
+  const last = cleaned.lastIndexOf("}");
+  if (first >= 0 && last > first) candidates.push(cleaned.slice(first, last + 1));
+
+  let lastError: unknown = null;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("The selected model returned malformed JSON.");
+}
+
+async function repairResearchJson<T>(orgId: string, raw: string): Promise<T> {
+  try {
+    return await aiJsonForOrg<T>(
+      orgId,
+      `You are a strict JSON repair utility inside SPA Intelligence.
+The input came from a research model and is intended to be one JSON object, but it may contain a missing comma, broken array separator, stray markdown fence or other JSON syntax defect.
+Repair syntax only. Preserve the existing facts, URLs, strings, arrays and object structure. Do not research, infer, add, remove or rewrite factual content. Return one valid JSON object only.`,
+      `Repair this malformed JSON and return the corrected JSON object:\n\n${raw.slice(0, 24000)}`,
+      "low",
+    );
+  } catch (error) {
+    console.error("[SPA Intelligence] JSON repair failed", error);
+    throw new Error("The research provider returned malformed structured data twice. Nothing was saved. Retry the scan.");
   }
 }
 
@@ -76,8 +100,22 @@ async function openRouterResearch<T>(orgId: string, system: string, user: string
   const json = JSON.parse(body) as any;
   const content = json.choices?.[0]?.message?.content;
   if (!content) throw new Error("OpenRouter returned no research content.");
+
+  const raw = String(content);
+  let data: T;
+  try {
+    data = parseJson<T>(raw);
+  } catch (error) {
+    console.warn("[SPA Intelligence] Research JSON was malformed, attempting automatic repair", {
+      model: String(json.model ?? runtime.model),
+      message: error instanceof Error ? error.message : String(error),
+      preview: raw.slice(0, 600),
+    });
+    data = await repairResearchJson<T>(orgId, raw);
+  }
+
   return {
-    data: parseJson<T>(String(content)),
+    data,
     modelUsed: String(json.model ?? runtime.model),
     usage: json.usage ?? null,
   };
