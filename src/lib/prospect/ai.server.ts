@@ -50,6 +50,8 @@ async function requestJson<T>(apiKey: string, model: string, system: string, use
       body: JSON.stringify({
         model,
         messages,
+        max_tokens: 4000,
+        temperature: 0.2,
         ...(useJsonMode ? { response_format: { type: "json_object" } } : {}),
       }),
       signal: AbortSignal.timeout(120000),
