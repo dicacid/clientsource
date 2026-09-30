@@ -5,7 +5,7 @@ import { fetchPage, htmlToText, hostOf, rankedLinks } from "@/lib/prospect/web.s
 import { BUSINESS_CONTEXTS, capabilityText } from "./capabilities";
 import { diagnosePublicPage } from "./fetch-diagnostic.server";
 import { getAiRuntime } from "./openrouter.server";
-import { getCapabilityProfile, saveResearchRun } from "./store.server";
+import { competitorRegistry, getCapabilityProfile, mergeCompetitorDiscovery, saveCompetitorAnalysis, saveResearchRun } from "./store.server";
 
 type Usage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number | string };
 
@@ -307,5 +307,223 @@ For each signal explain SPA fit without asserting unverified equipment requireme
       status: "completed",
       result: response,
     });
+    return response;
+  });
+
+
+export const discoverSpaCompetitors = createServerFn({ method: "POST" })
+  .middleware([requireRenderMember])
+  .inputValidator((d: unknown) => z.object({
+    businessContext,
+    region: z.string().min(2).max(120).default("Australia"),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const profile = BUSINESS_CONTEXTS[data.businessContext];
+    const capabilities = (await getCapabilityProfile(context.organizationId)) || capabilityText();
+
+    type Discovery = {
+      competitors: {
+        name: string;
+        website: string | null;
+        location: string | null;
+        category: "direct" | "adjacent" | "large-scale";
+        why_competitor: string;
+        overlap_areas: string[];
+        source_urls: string[];
+      }[];
+      landscape_notes: string[];
+    };
+
+    const system = `You are SPA Intelligence mapping the current competitive landscape for ${profile.name}.
+Identify genuine competitors and strategically relevant adjacent firms using current public sources.
+Do not include Solar Power Australia, Solar Online Australia or ELMOFO themselves.
+Do not treat a component manufacturer as a competitor unless it also competes for integrated customer projects.
+Separate direct competitors from adjacent specialists and much larger-scale providers.
+Every returned company must have at least one public source URL supporting why it belongs in the landscape.
+Never invent market share, customers, contracts or capabilities.`;
+
+    const prompt = `Business: ${profile.name}
+Region: ${data.region}
+Commercial lens: ${profile.lens}
+
+KNOWN SPA CAPABILITY PROFILE:
+${capabilities.slice(0, 12000)}
+
+Discover the competitor landscape Brett should actually monitor.
+
+Focus particularly on firms competing for one or more of:
+- industrial and commercial solar
+- remote and off-grid power
+- relocatable or skid-mounted power systems
+- mining and resources energy systems
+- BESS and hybrid power
+- solar plus storage integration
+- remote industrial infrastructure power
+- specialist custom renewable-energy engineering
+- related Australian power-system integration work
+
+Return JSON:
+{
+  "competitors": [
+    {
+      "name": "...",
+      "website": "https://..." or null,
+      "location": "City/State/Country" or best supported region,
+      "category": "direct" | "adjacent" | "large-scale",
+      "why_competitor": "evidence-based explanation",
+      "overlap_areas": ["..."],
+      "source_urls": ["https://..."]
+    }
+  ],
+  "landscape_notes": ["..."]
+}
+
+Return 8 to 14 companies, prioritising relevance over fame.
+A direct competitor should have meaningful overlap with SPA's actual offering.
+An adjacent competitor may overlap only in a specialist niche.
+A large-scale competitor can be substantially bigger than SPA but still compete for industrial, mining, microgrid or hybrid-power work.
+Do not output a company without a source URL.`;
+
+    const result = await openRouterResearch<Discovery>(context.organizationId, system, prompt);
+    const clean = (result.data.competitors ?? [])
+      .filter((item) => item?.name && Array.isArray(item.source_urls) && item.source_urls.length)
+      .map((item) => ({
+        name: String(item.name).trim().slice(0, 180),
+        website: item.website ? String(item.website).trim().slice(0, 300) : null,
+        location: item.location ? String(item.location).trim().slice(0, 200) : null,
+        category: item.category === "adjacent" || item.category === "large-scale" ? item.category : "direct" as const,
+        whyCompetitor: String(item.why_competitor ?? "").trim().slice(0, 1500),
+        overlapAreas: Array.isArray(item.overlap_areas) ? item.overlap_areas.map(String).map((x) => x.trim()).filter(Boolean).slice(0, 12) : [],
+        sourceUrls: item.source_urls.map(String).map((x) => x.trim()).filter((x) => /^https?:\/\//i.test(x)).slice(0, 12),
+      }))
+      .filter((item) => item.sourceUrls.length);
+
+    const registry = await mergeCompetitorDiscovery(context.organizationId, clean);
+    await saveResearchRun(context.organizationId, {
+      query: `Competitor landscape · ${data.region}`,
+      researchType: "competitor-discovery",
+      businessContext: data.businessContext,
+      researchedAt: new Date().toISOString(),
+      modelUsed: result.modelUsed,
+      status: "completed",
+      result: { registry, landscapeNotes: result.data.landscape_notes ?? [] },
+    });
+
+    return {
+      competitors: registry,
+      landscapeNotes: result.data.landscape_notes ?? [],
+      modelUsed: result.modelUsed,
+      researchedAt: new Date().toISOString(),
+    };
+  });
+
+export const analyseSpaCompetitor = createServerFn({ method: "POST" })
+  .middleware([requireRenderMember])
+  .inputValidator((d: unknown) => z.object({
+    competitorId: z.string().uuid(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const registry = await competitorRegistry(context.organizationId);
+    const competitor = registry.find((item) => item.id === data.competitorId);
+    if (!competitor) throw new Error("Competitor record not found.");
+
+    const capabilities = (await getCapabilityProfile(context.organizationId)) || capabilityText();
+    const domain = competitor.website ? normalizeQueryDomain(competitor.website) : null;
+    const direct = await directWebsiteContext(domain);
+    const directText = direct.pages.map((p) => `URL: ${p.url}\n${p.text}`).join("\n---\n").slice(0, 26000);
+
+    type Analysis = {
+      company: string;
+      website: string | null;
+      positioning: string;
+      customer_segments: string[];
+      geographic_focus: string[];
+      overlap_with_spa: string[];
+      delivery_model: string[];
+      differentiators: { item: string; source_url: string; classification: string }[];
+      moat_hypotheses: {
+        moat: string;
+        evidence: string;
+        source_url: string | null;
+        confidence: "HIGH" | "MEDIUM" | "LOW";
+        classification: "OBSERVED_FACT" | "SOURCE_CLAIM" | "INFERENCE";
+      }[];
+      vulnerabilities_or_constraints: {
+        item: string;
+        evidence: string;
+        source_url: string | null;
+        classification: "OBSERVED_FACT" | "SOURCE_CLAIM" | "INFERENCE";
+      }[];
+      current_projects_or_signals: {
+        item: string;
+        source_url: string;
+        evidence_date: string | null;
+      }[];
+      strategic_implications_for_spa: string[];
+      questions_for_brett: string[];
+      evidence: {
+        statement: string;
+        source_url: string;
+        evidence_date: string | null;
+        classification: "OBSERVED_FACT" | "SOURCE_CLAIM" | "INFERENCE";
+      }[];
+    };
+
+    const system = `You are SPA Intelligence performing evidence-based competitor analysis for Solar Power Australia.
+Analyse the competitor without simplistic winner/loser language.
+A "moat" is a defensible advantage hypothesis, not a fact unless directly evidenced.
+Separate OBSERVED_FACT, SOURCE_CLAIM and INFERENCE.
+Never invent revenue, market share, customers, contracts, headcount, patents, proprietary technology or project wins.
+Every substantive observed fact or source claim must have a public source URL.
+Strategic implications may be analytical, but must be clearly framed as implications for Brett to consider.`;
+
+    const prompt = `Competitor: ${competitor.name}
+Known website: ${competitor.website ?? "(not stored)"}
+Known category: ${competitor.category}
+Why it was logged: ${competitor.whyCompetitor}
+Known overlap: ${competitor.overlapAreas.join(", ") || "(not yet classified)"}
+Discovery sources:
+${competitor.sourceUrls.join("\n")}
+
+SPA CAPABILITY PROFILE:
+${capabilities.slice(0, 12000)}
+
+DIRECT COMPETITOR WEBSITE RETRIEVAL STATUS: ${direct.status}
+DIRECT WEBSITE MATERIAL:
+${directText || "(none available, use current public web sources)"}
+
+Return JSON containing:
+company, website, positioning, customer_segments[], geographic_focus[], overlap_with_spa[], delivery_model[],
+differentiators[], moat_hypotheses[], vulnerabilities_or_constraints[], current_projects_or_signals[],
+strategic_implications_for_spa[], questions_for_brett[], evidence[].
+
+For differentiators: item, source_url, classification.
+For moat_hypotheses: moat, evidence, source_url or null, confidence HIGH/MEDIUM/LOW, classification OBSERVED_FACT/SOURCE_CLAIM/INFERENCE.
+For vulnerabilities_or_constraints: item, evidence, source_url or null, classification.
+For projects/signals: item, source_url, evidence_date where known.
+Do not convert lack of evidence into a vulnerability.
+Do not call something a moat merely because the company says it is good at it. Look for repeatable structural advantages such as installed base, vertically integrated capability, local manufacturing, long-term operating contracts, proprietary control systems, financing model, distribution reach, specialist certification, demonstrated remote-site track record, or switching costs, but only when supported or clearly labelled inference.`;
+
+    const result = await openRouterResearch<Analysis>(context.organizationId, system, prompt);
+    const response = {
+      competitor,
+      analysis: result.data,
+      directRetrieval: direct,
+      modelUsed: result.modelUsed,
+      usage: result.usage,
+      researchedAt: new Date().toISOString(),
+    };
+
+    await saveCompetitorAnalysis(context.organizationId, competitor.id, response);
+    await saveResearchRun(context.organizationId, {
+      query: competitor.name,
+      researchType: "competitor-analysis",
+      businessContext: "spa",
+      researchedAt: response.researchedAt,
+      modelUsed: result.modelUsed,
+      status: direct.status === "ok" ? "completed" : "partial",
+      result: response,
+    });
+
     return response;
   });
