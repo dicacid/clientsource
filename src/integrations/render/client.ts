@@ -210,17 +210,23 @@ export const renderDb = {
 
     async getUser() {
       const access_token = token();
-      try {
-        if (access_token) {
+
+      if (access_token) {
+        try {
           const data = await sessionUserRequest({ data: { token: access_token } });
           return { data, error: null };
+        } catch {
+          // A stale/expired local token must not turn a valid cookie-backed session
+          // into a one-navigation error. Clear it, then fall through to the secure
+          // HttpOnly cookie in the same request cycle.
+          setToken(null);
         }
-        // HttpOnly cookie fallback keeps the browser signed in even if localStorage
-        // is unavailable or gets cleared during a hard reload / browser mode change.
+      }
+
+      try {
         const data = await currentUserRequest();
         return { data, error: null };
       } catch (error) {
-        if (access_token) setToken(null);
         return { data: { user: null }, error: err(error) };
       }
     },
