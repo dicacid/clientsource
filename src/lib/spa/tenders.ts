@@ -565,3 +565,29 @@ export function parseTasmanianOpenTenderText(text: string, sourceUrl: string): R
   }
   return rows;
 }
+
+
+export function extractTasmanianDetailLinks(html: string, baseUrl: string): Map<string, string> {
+  const links = new Map<string, string>();
+  const matcher = /<a\b[^>]*href=["']([^"']*\/OpenForBids\/Details\/\d+[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(html)) !== null) {
+    const href = String(match[1] ?? "").trim();
+    const label = String(match[2] ?? "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;|&#160;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+    const refMatch = label.match(/\(([^()]{2,120})\)\s*$/);
+    if (!href || !refMatch) continue;
+    try {
+      links.set(refMatch[1]!.trim(), new URL(href, baseUrl).toString());
+    } catch {
+      // Ignore malformed links from source HTML.
+    }
+  }
+  return links;
+}

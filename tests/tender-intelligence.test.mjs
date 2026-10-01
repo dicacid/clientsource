@@ -4,6 +4,7 @@ import {
   businessRouting,
   classifyClosing,
   deterministicTenderKey,
+  extractTasmanianDetailLinks,
   isOfficialAustralianProcurementUrl,
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
@@ -172,4 +173,15 @@ test("parses every Tasmanian tender sharing the same closing-date group", () => 
   assert.deepEqual(rows.slice(0, 2).map((row) => row.referenceNumber), ["4260", "4322"]);
   assert.equal(rows[0].closingDateRaw, "07/10/2026 02:00 PM");
   assert.equal(rows[2].referenceNumber, "J959");
+});
+
+
+test("extracts canonical Tasmania detail links from official listing HTML", () => {
+  const links = extractTasmanianDetailLinks(
+    '<a href="/OpenForBids/Details/6630">Operations Management and Control System (3930)</a>' +
+    '<a href="/OpenForBids/Details/6647"><span>School Uniforms</span> (DECYP 2426)</a>',
+    "https://www.tenders.tas.gov.au/OpenForBids/List/Public/ClosingDate",
+  );
+  assert.equal(links.get("3930"), "https://www.tenders.tas.gov.au/OpenForBids/Details/6630");
+  assert.equal(links.get("DECYP 2426"), "https://www.tenders.tas.gov.au/OpenForBids/Details/6647");
 });

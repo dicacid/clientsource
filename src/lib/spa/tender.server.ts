@@ -8,6 +8,7 @@ import {
   canonicalUrl,
   classifyClosing,
   deterministicTenderKey,
+  extractTasmanianDetailLinks,
   highRelevance,
   isOfficialAustralianProcurementUrl,
   parseAustralianLocalDate,
@@ -398,7 +399,11 @@ const tasmaniaAdapter: TenderSourceAdapter = {
     const html = await fetchedText(url, 15000);
     const rows = parseTasmanianOpenTenderText(decodeHtmlLines(html), url);
     if (!rows.length) throw new Error("Official Tasmania page was reachable but no open tender records matched the current parser.");
-    return rows;
+    const details = extractTasmanianDetailLinks(html, url);
+    return rows.map((row) => ({
+      ...row,
+      sourceUrl: details.get(row.referenceNumber ?? "") ?? row.sourceUrl,
+    }));
   },
 };
 
