@@ -763,3 +763,9 @@ export async function resetPasswordForUser(userId: string, password: string): Pr
     user.password_hash = hashPassword(password);
   });
 }
+
+
+export async function organizationIdsForInternalJobs() {
+  const state = await readState();
+  return state.organizations.map((organization) => organization.id);
+}
