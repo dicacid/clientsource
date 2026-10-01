@@ -12,17 +12,24 @@ const CLASS_STYLES: Record<string, string> = {
   "NEEDS VERIFICATION": "border-zinc-500/30 bg-zinc-500/10 text-zinc-300",
 };
 
-export function IntelBadge({ value }: { value?: string | null }) {
-  if (!value) return null;
+function textOf(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
+export function IntelBadge({ value }: { value?: unknown }) {
+  const text = textOf(value);
+  if (!text) return null;
   return (
-    <span className={`inline-flex rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${CLASS_STYLES[value] ?? "border-border bg-muted text-muted-foreground"}`}>
-      {value.replaceAll("_", " ")}
+    <span className={`inline-flex rounded-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${CLASS_STYLES[text] ?? "border-border bg-muted text-muted-foreground"}`}>
+      {text.replaceAll("_", " ")}
     </span>
   );
 }
 
-export function SourceLink({ href, label = "Source" }: { href?: string | null; label?: string }) {
-  if (!href) return null;
+export function SourceLink({ href, label = "Source" }: { href?: unknown; label?: string }) {
+  if (typeof href !== "string" || !/^https?:\/\//i.test(href)) return null;
   return (
     <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
       {label}<ExternalLink className="h-3 w-3" />
@@ -45,7 +52,14 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
   const asArray = <T,>(value: unknown): T[] => Array.isArray(value) ? value : [];
   const d = {
     ...raw,
-    locations: asArray<string>(raw.locations),
+    organisation: textOf(raw.organisation),
+    official_website: typeof raw.official_website === "string" ? raw.official_website : null,
+    industry: textOf(raw.industry),
+    what_the_company_does: textOf(raw.what_the_company_does),
+    possible_first_approach: textOf(raw.possible_first_approach),
+    follow_up_strategy: textOf(raw.follow_up_strategy),
+    next_action: textOf(raw.next_action),
+    locations: asArray<unknown>(raw.locations).map((x) => textOf(x)).filter(Boolean),
     current_projects: asArray<any>(raw.current_projects),
     recent_developments: asArray<any>(raw.recent_developments),
     energy_power_infrastructure_context: asArray<any>(raw.energy_power_infrastructure_context),
@@ -77,7 +91,7 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
             {d.industry && <span>{d.industry}</span>}
             {d.official_website && <SourceLink href={d.official_website} label="Official website" />}
-            <span>Model: <code>{result.modelUsed}</code></span>
+            <span>Model: <code>{textOf(result.modelUsed, "unknown")}</code></span>
             <span>{new Date(result.researchedAt).toLocaleString()}</span>
           </div>
         </div>
@@ -89,8 +103,8 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
 
       {result.directRetrieval && (
         <div className={`border px-3 py-2 text-sm ${result.directRetrieval.status === "ok" ? "border-emerald-500/30 bg-emerald-500/5" : "border-amber-500/30 bg-amber-500/5"}`}>
-          <strong>Direct website retrieval: {String(result.directRetrieval.status).replaceAll("_", " ")}</strong>
-          <span className="ml-2 text-muted-foreground">{result.directRetrieval.message}</span>
+          <strong>Direct website retrieval: {textOf(result.directRetrieval.status, "unknown").replaceAll("_", " ")}</strong>
+          <span className="ml-2 text-muted-foreground">{textOf(result.directRetrieval.message)}</span>
           {result.directRetrieval.diagnostic?.httpStatus && <span className="ml-2 font-mono text-xs">HTTP {result.directRetrieval.diagnostic.httpStatus}</span>}
         </div>
       )}
@@ -112,8 +126,8 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="space-y-3">
             {d.current_projects.map((x: any, i: number) => (
               <div key={i} className="border-l-2 border-primary/40 pl-3">
-                <div className="flex flex-wrap items-center gap-2"><IntelBadge value={x.classification} />{x.evidence_date && <span className="font-mono text-[10px] text-muted-foreground">{x.evidence_date}</span>}</div>
-                <p className="mt-1 text-sm">{x.item}</p><SourceLink href={x.source_url} />
+                <div className="flex flex-wrap items-center gap-2"><IntelBadge value={x?.classification} />{x.evidence_date && <span className="font-mono text-[10px] text-muted-foreground">{textOf(x?.evidence_date)}</span>}</div>
+                <p className="mt-1 text-sm">{textOf(x?.item)}</p><SourceLink href={x?.source_url} />
               </div>
             ))}
           </div>
@@ -125,8 +139,8 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="space-y-3">
             {d.recent_developments.map((x: any, i: number) => (
               <div key={i} className="border-l-2 border-border pl-3">
-                <div className="flex flex-wrap items-center gap-2"><IntelBadge value={x.classification} />{x.evidence_date && <span className="font-mono text-[10px] text-muted-foreground">{x.evidence_date}</span>}</div>
-                <p className="mt-1 text-sm">{x.item}</p><SourceLink href={x.source_url} />
+                <div className="flex flex-wrap items-center gap-2"><IntelBadge value={x?.classification} />{x.evidence_date && <span className="font-mono text-[10px] text-muted-foreground">{textOf(x?.evidence_date)}</span>}</div>
+                <p className="mt-1 text-sm">{textOf(x?.item)}</p><SourceLink href={x?.source_url} />
               </div>
             ))}
           </div>
@@ -138,8 +152,8 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="grid gap-3 md:grid-cols-2">
             {d.capability_matches.map((x: any, i: number) => (
               <div key={i} className="border border-border p-3">
-                <div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{x.capability}</strong><IntelBadge value={x.provenance} /></div>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">{x.rationale}</p>
+                <div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{textOf(x?.capability)}</strong><IntelBadge value={x?.provenance} /></div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">{textOf(x?.rationale)}</p>
               </div>
             ))}
           </div>
@@ -151,11 +165,11 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="space-y-4">
             {d.opportunity_hypotheses.map((x: any, i: number) => (
               <div key={i} className="border-l-2 border-orange-500/50 pl-3">
-                <IntelBadge value={x.classification} />
-                <p className="mt-1 text-sm font-medium">{x.hypothesis}</p>
-                <p className="mt-1 text-xs text-muted-foreground"><strong>Why now:</strong> {x.why_now}</p>
-                <p className="mt-1 text-xs text-muted-foreground"><strong>Validate:</strong> {x.validation_needed}</p>
-                <SourceLink href={x.source_url} />
+                <IntelBadge value={x?.classification} />
+                <p className="mt-1 text-sm font-medium">{textOf(x?.hypothesis)}</p>
+                <p className="mt-1 text-xs text-muted-foreground"><strong>Why now:</strong> {textOf(x?.why_now)}</p>
+                <p className="mt-1 text-xs text-muted-foreground"><strong>Validate:</strong> {textOf(x?.validation_needed)}</p>
+                <SourceLink href={x?.source_url} />
               </div>
             ))}
           </div>
@@ -167,8 +181,8 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="divide-y divide-border">
             {d.people.map((x: any, i: number) => (
               <div key={i} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                <div><strong className="text-sm">{x.name}</strong><div className="text-xs text-muted-foreground">{x.title}</div>{x.contact && <div className="mt-1 font-mono text-xs">{x.contact}</div>}</div>
-                <div className="flex items-center gap-2"><IntelBadge value={x.classification} /><SourceLink href={x.source_url} /></div>
+                <div><strong className="text-sm">{textOf(x?.name)}</strong><div className="text-xs text-muted-foreground">{textOf(x?.title)}</div>{x.contact && <div className="mt-1 font-mono text-xs">{textOf(x?.contact)}</div>}</div>
+                <div className="flex items-center gap-2"><IntelBadge value={x?.classification} /><SourceLink href={x?.source_url} /></div>
               </div>
             ))}
           </div>
@@ -180,9 +194,9 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="space-y-3">
             {d.tenders.map((x: any, i: number) => (
               <div key={i} className="border border-border p-3">
-                <strong className="text-sm">{x.title}</strong>
-                <div className="mt-1 font-mono text-[11px] text-muted-foreground">Ref: {x.reference || "not published"} · Closing: {x.closing_date || "not found"}</div>
-                <div className="mt-2"><SourceLink href={x.source_url} /></div>
+                <strong className="text-sm">{textOf(x?.title)}</strong>
+                <div className="mt-1 font-mono text-[11px] text-muted-foreground">Ref: {textOf(x?.reference, "not published")} · Closing: {textOf(x?.closing_date, "not found")}</div>
+                <div className="mt-2"><SourceLink href={x?.source_url} /></div>
               </div>
             ))}
           </div>
@@ -191,16 +205,16 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
 
       {!!d.competitor_implications?.length && (
         <Panel title="What this means for SPA">
-          <ul className="space-y-2 text-sm">{d.competitor_implications.map((x: string, i: number) => <li key={i} className="border-l-2 border-primary/50 pl-3">{x}</li>)}</ul>
+          <ul className="space-y-2 text-sm">{d.competitor_implications.map((x: string, i: number) => <li key={i} className="border-l-2 border-primary/50 pl-3">{textOf(x, "Unsupported saved value")}</li>)}</ul>
         </Panel>
       )}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Questions SPA should ask">
-          {!!d.questions_spa_should_ask?.length ? <ul className="space-y-2 text-sm">{d.questions_spa_should_ask.map((x: string, i: number) => <li key={i}>• {x}</li>)}</ul> : <p className="text-sm text-muted-foreground">No questions generated.</p>}
+          {!!d.questions_spa_should_ask?.length ? <ul className="space-y-2 text-sm">{d.questions_spa_should_ask.map((x: string, i: number) => <li key={i}>• {textOf(x, "Unsupported saved value")}</li>)}</ul> : <p className="text-sm text-muted-foreground">No questions generated.</p>}
         </Panel>
         <Panel title="Risks / unknowns">
-          {!!d.risks_unknowns?.length ? <ul className="space-y-2 text-sm">{d.risks_unknowns.map((x: string, i: number) => <li key={i}>• {x}</li>)}</ul> : <p className="text-sm text-muted-foreground">No explicit unknowns returned.</p>}
+          {!!d.risks_unknowns?.length ? <ul className="space-y-2 text-sm">{d.risks_unknowns.map((x: string, i: number) => <li key={i}>• {textOf(x, "Unsupported saved value")}</li>)}</ul> : <p className="text-sm text-muted-foreground">No explicit unknowns returned.</p>}
         </Panel>
       </div>
 
@@ -213,9 +227,9 @@ export function IntelligenceResult({ result, title = "Commercial dossier" }: { r
           <div className="space-y-3">
             {d.evidence.map((x: any, i: number) => (
               <div key={i} className="grid gap-2 border-b border-border pb-3 last:border-0 last:pb-0 md:grid-cols-[150px_1fr_auto]">
-                <IntelBadge value={x.classification} />
-                <p className="text-sm">{x.statement}</p>
-                <div className="text-right"><SourceLink href={x.source_url} />{x.evidence_date && <div className="font-mono text-[10px] text-muted-foreground">{x.evidence_date}</div>}</div>
+                <IntelBadge value={x?.classification} />
+                <p className="text-sm">{textOf(x?.statement)}</p>
+                <div className="text-right"><SourceLink href={x?.source_url} />{x.evidence_date && <div className="font-mono text-[10px] text-muted-foreground">{textOf(x?.evidence_date)}</div>}</div>
               </div>
             ))}
           </div>
