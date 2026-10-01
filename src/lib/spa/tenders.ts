@@ -154,7 +154,7 @@ export function secondaryTenderKey(raw: Pick<RawTender, "issuer" | "tenderTitle"
 
 export function parseAustralianLocalDate(input: string | null, timeZone = "Australia/Melbourne"): string | null {
   if (!input) return null;
-  const value = input.trim().replace(/\b([ap])\.m\.\b/gi, "$1m");
+  const value = input.trim().replace(/([ap])\.m\./gi, "$1m");
   const wordMatch = value.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
   const numericMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-?\s*(\d{1,2}):(\d{2})\s*(am|pm))?$/i);
   const m = wordMatch ?? numericMatch;
