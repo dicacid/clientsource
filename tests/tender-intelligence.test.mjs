@@ -84,3 +84,15 @@ test("parses consolidated-government tender pages used by ACT and Victoria", () 
   assert.equal(rows[0].issuer, "City and Environment Directorate");
   assert.equal(rows[0].opportunityType, "Expression of Interest");
 });
+
+
+test("normalises Townsville council numeric closing times", () => {
+  assert.equal(
+    parseAustralianLocalDate("31/10/2026 5:00 PM", "Australia/Brisbane"),
+    "2026-10-31T07:00:00.000Z",
+  );
+  assert.equal(
+    parseAustralianLocalDate("26/07/2019 - 5:00 p.m.", "Australia/Brisbane"),
+    "2019-07-26T07:00:00.000Z",
+  );
+});
