@@ -498,61 +498,70 @@ export function parseTasmanianOpenTenderText(text: string, sourceUrl: string): R
   const rows: RawTender[] = [];
   const ignored = /^(?:files?|title|agency|opened|---|image:\s*not here)$/i;
 
-  for (let i = 0; i < lines.length; i++) {
-    const closeMatch = lines[i]!.match(/^Closes:\s*(.+)$/i);
-    if (!closeMatch) continue;
-    const closingDateRaw = closeMatch[1]!.replace(/,\s*at\s+/i, " ").trim();
+  const closingIndexes = lines
+    .map((line, index) => /^Closes:\s*/i.test(line) ? index : -1)
+    .filter((index) => index >= 0);
 
-    let titleIndex = -1;
-    for (let j = i + 1; j < Math.min(lines.length, i + 10); j++) {
-      const candidate = lines[j]!;
-      if (/^Closes:/i.test(candidate)) break;
+  for (let group = 0; group < closingIndexes.length; group++) {
+    const closeIndex = closingIndexes[group]!;
+    const nextCloseIndex = closingIndexes[group + 1] ?? lines.length;
+    const closingDateRaw = lines[closeIndex]!
+      .replace(/^Closes:\s*/i, "")
+      .replace(/,\s*at\s+/i, " ")
+      .trim();
+
+    for (let i = closeIndex + 1; i < nextCloseIndex; i++) {
+      const candidate = lines[i]!;
       if (ignored.test(candidate) || /^UNSPSC Category:/i.test(candidate)) continue;
       if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(candidate)) continue;
-      if (/\([^()]{2,120}\)\s*$/.test(candidate)) { titleIndex = j; break; }
+
+      const titleMatch = candidate.match(/^(.*?)\s*\(([^()]{2,120})\)\s*$/);
+      if (!titleMatch) continue;
+      const tenderTitle = titleMatch[1]!.trim();
+      const reference = titleMatch[2]!.trim();
+      if (!tenderTitle || !reference) continue;
+
+      let category: string | null = null;
+      let issuer = "";
+      let publishedDateRaw: string | null = null;
+      for (let j = i + 1; j < Math.min(nextCloseIndex, i + 8); j++) {
+        const detail = lines[j]!;
+        if (ignored.test(detail)) continue;
+        const categoryMatch = detail.match(/^UNSPSC Category:\s*(.+)$/i);
+        if (categoryMatch) {
+          category = categoryMatch[1]!.trim().slice(0, 500);
+          continue;
+        }
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(detail)) {
+          publishedDateRaw = detail;
+          break;
+        }
+        if (!issuer && !/\([^()]{2,120}\)\s*$/.test(detail)) issuer = detail;
+      }
+      if (!issuer) continue;
+
+      rows.push({
+        sourceName: "Tasmanian Government Tenders",
+        sourceSpecificId: reference,
+        sourceUrl,
+        tenderTitle: tenderTitle.slice(0, 500),
+        issuer: issuer.slice(0, 240),
+        referenceNumber: reference,
+        opportunityType: /expression of interest/i.test(tenderTitle) ? "Expression of Interest" : "Tender",
+        category,
+        summary: null,
+        publishedDateRaw,
+        closingDateRaw: /^perpetually open$/i.test(closingDateRaw) ? null : closingDateRaw,
+        timezone: "Australia/Hobart",
+        country: "Australia",
+        state: "TAS",
+        location: "Tasmania",
+        documentedContractValue: null,
+        tenderDocumentLinks: [],
+        sourceStatus: "open",
+        retrievalMethod: "direct",
+      });
     }
-    if (titleIndex < 0) continue;
-
-    const titleMatch = lines[titleIndex]!.match(/^(.*?)\s*\(([^()]{2,120})\)\s*$/);
-    if (!titleMatch) continue;
-    const tenderTitle = titleMatch[1]!.trim();
-    const reference = titleMatch[2]!.trim();
-    if (!tenderTitle || !reference) continue;
-
-    let category: string | null = null;
-    let issuer = "";
-    let publishedDateRaw: string | null = null;
-    for (let j = titleIndex + 1; j < Math.min(lines.length, titleIndex + 8); j++) {
-      const candidate = lines[j]!;
-      if (/^Closes:/i.test(candidate)) break;
-      const categoryMatch = candidate.match(/^UNSPSC Category:\s*(.+)$/i);
-      if (categoryMatch) { category = categoryMatch[1]!.trim().slice(0, 500); continue; }
-      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(candidate)) { publishedDateRaw = candidate; break; }
-      if (!ignored.test(candidate) && !issuer) issuer = candidate;
-    }
-    if (!issuer) continue;
-
-    rows.push({
-      sourceName: "Tasmanian Government Tenders",
-      sourceSpecificId: reference,
-      sourceUrl,
-      tenderTitle: tenderTitle.slice(0, 500),
-      issuer: issuer.slice(0, 240),
-      referenceNumber: reference,
-      opportunityType: /expression of interest/i.test(tenderTitle) ? "Expression of Interest" : "Tender",
-      category,
-      summary: null,
-      publishedDateRaw,
-      closingDateRaw,
-      timezone: "Australia/Hobart",
-      country: "Australia",
-      state: "TAS",
-      location: "Tasmania",
-      documentedContractValue: null,
-      tenderDocumentLinks: [],
-      sourceStatus: "open",
-      retrievalMethod: "direct",
-    });
   }
   return rows;
 }

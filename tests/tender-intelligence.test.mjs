@@ -143,7 +143,7 @@ test("official-search fallback only accepts approved Australian procurement host
 });
 
 
-test("parses Tasmanian open tender list records", () => {
+test("parses every Tasmanian tender sharing the same closing-date group", () => {
   const rows = parseTasmanianOpenTenderText(
     [
       "Open for Bids - Sorted by Closing Date",
@@ -151,11 +151,15 @@ test("parses Tasmanian open tender list records", () => {
       "Title",
       "Agency",
       "Opened",
-      "Closes: 09/10/2026, at 02:00 PM",
-      "Operations Management and Control System (3930)",
-      "UNSPSC Category: Information Technology Broadcasting and Telecommunications",
+      "Closes: 07/10/2026, at 02:00 PM",
+      "Frankford Road – Road Realignment East of Beasleys Road (4260)",
+      "UNSPSC Category: Structures and Building and Construction and Manufacturing Components and Supplies",
       "Building Tasmania",
-      "22/08/2026",
+      "12/09/2026",
+      "Rokeby Park and Ride (4322)",
+      "UNSPSC Category: Structures and Building and Construction and Manufacturing Components and Supplies",
+      "Building Tasmania",
+      "05/09/2026",
       "Closes: 21/10/2026, at 02:00 PM",
       "Dodges Ferry Primary School - Major Redevelopment (J959)",
       "UNSPSC Category: Building and Facility Construction and Maintenance Services",
@@ -164,9 +168,8 @@ test("parses Tasmanian open tender list records", () => {
     ].join("\n"),
     "https://www.tenders.tas.gov.au/OpenForBids/List/Public/ClosingDate",
   );
-  assert.equal(rows.length, 2);
-  assert.equal(rows[0].referenceNumber, "3930");
-  assert.equal(rows[0].issuer, "Building Tasmania");
-  assert.equal(rows[0].closingDateRaw, "09/10/2026 02:00 PM");
-  assert.equal(rows[1].referenceNumber, "J959");
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.slice(0, 2).map((row) => row.referenceNumber), ["4260", "4322"]);
+  assert.equal(rows[0].closingDateRaw, "07/10/2026 02:00 PM");
+  assert.equal(rows[2].referenceNumber, "J959");
 });
