@@ -293,3 +293,65 @@ export function scoreTender(input: {
 export function highRelevance(score: number) {
   return score >= 65;
 }
+
+
+export type ConsolidatedTenderSourceConfig = {
+  sourceName: string;
+  sourceUrl: string;
+  timezone: string;
+  state: string;
+  location: string;
+};
+
+export function parseConsolidatedTenderText(text: string, config: ConsolidatedTenderSourceConfig): RawTender[] {
+  const opportunityTypes = [
+    "Request for Tender",
+    "Expression of Interest",
+    "Request for Quotation",
+    "Request for Information",
+    "Advanced Tender Notice",
+    "Other Arrangements",
+  ].join("|");
+  const matcher = new RegExp(
+    `([A-Z0-9][A-Z0-9 ._\\/-]{1,80})\\s+Open\\s+(${opportunityTypes})\\s+(.+?)\\s+Issued by:\\s+(.+?)\\s+UNSPSC[\\s\\S]*?(?:Opened|Released)\\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\\s+\\d{1,2}\\s+[A-Za-z]+\\s+\\d{4}\\s+\\d{1,2}:\\d{2}\\s+(?:am|pm))\\s+Closing\\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\\s+\\d{1,2}\\s+[A-Za-z]+\\s+\\d{4}\\s+\\d{1,2}:\\d{2}\\s+(?:am|pm))`,
+    "gi",
+  );
+
+  const rows: RawTender[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(text)) !== null) {
+    const reference = String(match[1] ?? "")
+      .replace(/^RFx Number Status & Type\s*/i, "")
+      .replace(/^Details\s*/i, "")
+      .trim()
+      .slice(0, 120);
+    const opportunityType = String(match[2] ?? "").trim();
+    const tenderTitle = String(match[3] ?? "").replace(/^Details\s*/i, "").trim();
+    const issuer = String(match[4] ?? "").trim();
+    const publishedDateRaw = String(match[5] ?? "").trim();
+    const closingDateRaw = String(match[6] ?? "").trim();
+    if (!reference || !tenderTitle || !issuer) continue;
+
+    rows.push({
+      sourceName: config.sourceName,
+      sourceSpecificId: reference,
+      sourceUrl: config.sourceUrl,
+      tenderTitle: tenderTitle.slice(0, 500),
+      issuer: issuer.slice(0, 240),
+      referenceNumber: reference,
+      opportunityType,
+      category: null,
+      summary: null,
+      publishedDateRaw,
+      closingDateRaw,
+      timezone: config.timezone,
+      country: "Australia",
+      state: config.state,
+      location: config.location,
+      documentedContractValue: null,
+      tenderDocumentLinks: [],
+      sourceStatus: "open",
+    });
+  }
+  return rows;
+}

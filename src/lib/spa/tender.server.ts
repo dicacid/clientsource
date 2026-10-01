@@ -9,6 +9,7 @@ import {
   deterministicTenderKey,
   highRelevance,
   parseAustralianLocalDate,
+  parseConsolidatedTenderText,
   scoreTender,
   secondaryTenderKey,
   type RawTender,
@@ -144,49 +145,14 @@ function decodeHtml(input: string) {
     .trim();
 }
 
-function cleanReference(value: string) {
-  return value
-    .replace(/^RFx Number Status & Type\s*/i, "")
-    .replace(/^Details\s*/i, "")
-    .trim()
-    .slice(0, 120);
-}
-
 function parseVictoriaPage(html: string, page: number): RawTender[] {
-  const text = decodeHtml(html);
-  const matcher = /([A-Z0-9][A-Z0-9 ._\/-]{1,80})\s+Open\s+(Request for Tender|Expression of Interest|Request for Quotation|Advanced Tender Notice)\s+(.+?)\s+Issued by:\s+(.+?)\s+UNSPSC[\s\S]*?Opened\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\d{1,2}\s+[A-Za-z]+\s+\d{4}\s+\d{1,2}:\d{2}\s+(?:am|pm))\s+Closing\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+\d{1,2}\s+[A-Za-z]+\s+\d{4}\s+\d{1,2}:\d{2}\s+(?:am|pm))/gi;
-  const rows: RawTender[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = matcher.exec(text)) !== null) {
-    const reference = cleanReference(match[1] ?? "");
-    const type = String(match[2] ?? "").trim();
-    const title = String(match[3] ?? "").replace(/^Details\s*/i, "").trim();
-    const issuer = String(match[4] ?? "").trim();
-    const opened = String(match[5] ?? "").trim();
-    const closing = String(match[6] ?? "").trim();
-    if (!reference || !title || !issuer) continue;
-    rows.push({
-      sourceName: "Buying for Victoria",
-      sourceSpecificId: reference,
-      sourceUrl: `https://www.tenders.vic.gov.au/tenders/open?page=${page}`,
-      tenderTitle: title.slice(0, 500),
-      issuer: issuer.slice(0, 240),
-      referenceNumber: reference,
-      opportunityType: type,
-      category: null,
-      summary: null,
-      publishedDateRaw: opened,
-      closingDateRaw: closing,
-      timezone: "Australia/Melbourne",
-      country: "Australia",
-      state: "VIC",
-      location: "Victoria",
-      documentedContractValue: null,
-      tenderDocumentLinks: [],
-      sourceStatus: "open",
-    });
-  }
-  return rows;
+  return parseConsolidatedTenderText(decodeHtml(html), {
+    sourceName: "Buying for Victoria",
+    sourceUrl: `https://www.tenders.vic.gov.au/tenders/open?page=${page}`,
+    timezone: "Australia/Melbourne",
+    state: "VIC",
+    location: "Victoria",
+  });
 }
 
 async function fetchedText(url: string, timeout = 15000) {
@@ -211,6 +177,24 @@ const victoriaAdapter: TenderSourceAdapter = {
     }));
     const rows = pages.flat();
     if (!rows.length) throw new Error("Official Victoria page was reachable but no tender records matched the current parser.");
+    return rows;
+  },
+};
+
+const actAdapter: TenderSourceAdapter = {
+  id: "tenders-act",
+  name: "Tenders ACT",
+  async retrieve() {
+    const url = "https://www.tenders.act.gov.au/tenders/open";
+    const html = await fetchedText(url, 12000);
+    const rows = parseConsolidatedTenderText(decodeHtml(html), {
+      sourceName: "Tenders ACT",
+      sourceUrl: url,
+      timezone: "Australia/Sydney",
+      state: "ACT",
+      location: "Australian Capital Territory",
+    });
+    if (!rows.length) throw new Error("Official ACT page was reachable but no tender records matched the current parser.");
     return rows;
   },
 };
@@ -271,7 +255,7 @@ const ausTenderAdapter: TenderSourceAdapter = {
   },
 };
 
-const ADAPTERS: TenderSourceAdapter[] = [victoriaAdapter, nswAdapter, ausTenderAdapter];
+const ADAPTERS: TenderSourceAdapter[] = [victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
 
 export async function tenderSourceHealth() {
   const sources: Array<{
