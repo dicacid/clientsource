@@ -721,9 +721,10 @@ export const researchSpaVentureStaged = createServerFn({ method: "POST" })
   .middleware([requireRenderMember])
   .inputValidator((d: unknown) => z.object({
     query: z.string().min(2).max(500),
-    businessContext: z.literal("elmofo").default("elmofo"),
+    businessContext,
   }).parse(d))
   .handler(async ({ data, context }) => {
+    const profile = BUSINESS_CONTEXTS[data.businessContext];
     const domain = normalizeQueryDomain(data.query);
     const direct = await directWebsiteContext(domain);
     const capabilities = (await getCapabilityProfile(context.organizationId)) || capabilityText();
@@ -739,11 +740,16 @@ export const researchSpaVentureStaged = createServerFn({ method: "POST" })
 
     const external = await openRouterResearch<External>(
       context.organizationId,
-      `You are the current-web discovery stage for ELMOFO / Brett Sutherland innovation intelligence.
-Research the named venture, company or technology target using current public sources.
-Focus on EV engineering, electrification, battery systems, prototype engineering, motorsport technology, specialist manufacturing, partnerships and commercialisation.
-Never invent people, partnerships, projects, dates or technology claims.`,
-      `Target: ${data.query}
+      `You are the current-web discovery stage of SPA Intelligence for ${profile.name}.
+Research the named company, product, technology, partner or venture target using current public sources.
+Innovation lens: ${profile.lens}.
+Look for current products, engineering or technology developments, adjacent markets, partnerships, commercialisation signals and strategic opportunities relevant to the selected business.
+Do not force assumptions from Solar Power Australia, Solar Online or ELMOFO into another business unless the public evidence makes that overlap relevant.
+Never invent people, partnerships, projects, dates, products or technology claims.`,
+      `Selected business: ${profile.name}
+Business innovation lens: ${profile.lens}
+Target: ${data.query}
+
 Return concise JSON:
 {
   "organisation":"",
@@ -778,12 +784,15 @@ Every returned item needs a public source URL.`,
 
     const dossier = await aiJsonForOrg<Venture>(
       context.organizationId,
-      `You are the synthesis stage of SPA Intelligence working under the ELMOFO innovation lens.
+      `You are the synthesis stage of SPA Intelligence working under the ${profile.name} ventures and innovation lens.
+Selected business lens: ${profile.lens}.
 Use direct website evidence plus separately collected current public-web evidence.
 Separate OBSERVED_FACT, SOURCE_CLAIM, INFERENCE, COMMERCIAL_HYPOTHESIS and UNKNOWN.
-Do not make generic solar assumptions unless the evidence actually connects the target to solar.
-Do not invent people, contacts, customers, projects or technical capabilities.`,
-      `Target: ${data.query}
+Interpret opportunities for the selected business first. Cross-business opportunities may be surfaced when evidence supports them, but do not silently substitute another Brett Sutherland business as the primary context.
+Do not invent people, contacts, customers, projects, products or technical capabilities.`,
+      `Selected business: ${profile.name}
+Business innovation lens: ${profile.lens}
+Target: ${data.query}
 
 DIRECT WEBSITE RETRIEVAL STATUS: ${direct.status}
 DIRECT WEBSITE MATERIAL:
@@ -792,7 +801,7 @@ ${directText || "(No direct website material available.)"}
 CURRENT EXTERNAL WEB EVIDENCE:
 ${JSON.stringify(external.data)}
 
-SPA / ELMOFO CAPABILITY CONTEXT:
+CURRENT CAPABILITY CONTEXT:
 ${capabilities.slice(0, 12000)}
 
 Return the same evidence-rich JSON dossier shape used by SPA Intelligence:
@@ -803,13 +812,14 @@ risks_unknowns[], questions_spa_should_ask[], possible_first_approach,
 follow_up_strategy, next_action, evidence[].
 
 Every factual item must point to an exact URL from the supplied direct material or external evidence.
-Commercial hypotheses must be labelled as such.`,
+Commercial hypotheses must be labelled as such.
+Make the opportunity hypotheses, questions, approach and next action specifically useful to ${profile.name}.`,
       "medium",
     );
 
     const response = {
       query: data.query,
-      businessContext: "elmofo",
+      businessContext: data.businessContext,
       mode: "venture",
       directRetrieval: direct,
       dossier,
@@ -820,7 +830,7 @@ Commercial hypotheses must be labelled as such.`,
     await saveResearchRun(context.organizationId, {
       query: data.query,
       researchType: "venture-staged",
-      businessContext: "elmofo",
+      businessContext: data.businessContext,
       researchedAt: response.researchedAt,
       modelUsed: external.modelUsed,
       status: direct.status === "ok" ? "completed" : "partial",
