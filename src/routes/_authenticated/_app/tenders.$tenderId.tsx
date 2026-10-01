@@ -33,6 +33,7 @@ function fmt(value: string | null) {
   if (!value) return "Unknown";
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Intl.DateTimeFormat("en-AU", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(parsed));
   return new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Sydney",
     day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit",
@@ -186,6 +187,7 @@ function TenderDetail() {
                 ["Source status", record.sourceStatus],
                 ["First discovered", fmt(record.firstDiscovered)],
                 ["Last checked", fmt(record.lastChecked)],
+                ["Retrieval", record.retrievalMethod === "cached" ? `Dated official-source snapshot · ${fmt(record.sourceRetrievedAt ?? null)}` : record.retrievalMethod === "search" ? "Indexed official-source search" : "Direct official source"],
                 ["AI enrichment", record.enrichmentModel ? `${record.enrichmentModel} · ${fmt(record.enrichedAt)}` : "Not run / not required"],
               ].map(([label, value]) => (
                 <div key={label}>
@@ -312,6 +314,7 @@ function TenderDetail() {
 
           <section className="border border-border bg-card p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Sources & documents</div>
+            {record.retrievalMethod === "cached" && <p className="mt-3 text-xs leading-5 text-amber-300">Live refresh was unavailable. This record comes from an official-source snapshot retrieved {fmt(record.sourceRetrievedAt ?? null)}. Confirm current availability at the official source.</p>}
             <a href={record.canonicalSourceUrl} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-2 text-sm text-primary hover:underline">
               <ExternalLink className="h-4 w-4" />Open canonical source
             </a>

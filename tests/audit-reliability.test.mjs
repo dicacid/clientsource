@@ -51,6 +51,20 @@ test("Queensland fallback discovers the published CSV URL instead of fixing a mo
   assert.deepEqual(calls.slice(-1), [url]);
 });
 
+test("unavailable Queensland feeds use dated source data with unknown availability", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response(""));
+  t.mock.method(Date, "now", () => Date.parse("2026-10-01T12:00:00Z"));
+  const rows = await retrieveQueenslandPipeline();
+  assert.equal(rows.length, 21);
+  assert.ok(rows.every(row => row.retrievalMethod === "cached" && row.sourceRetrievedAt === "2026-10-01" && row.sourceStatus === "unknown" && row.closingDateRaw === null));
+});
+
+test("an expired Queensland snapshot is rejected when live retrieval fails", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => new Response(""));
+  t.mock.method(Date, "now", () => Date.parse("2026-11-02T12:00:00Z"));
+  await assert.rejects(retrieveQueenslandPipeline(), /too old to use/);
+});
+
 test("interactive research excludes batch and non-text models", () => {
   assert.equal(supportsResearchChat({ id: "openai/gpt-6-luna-pro:batch", outputModalities: ["text"] }), false);
   assert.equal(supportsResearchChat({ id: "provider/image", outputModalities: ["image"] }), false);

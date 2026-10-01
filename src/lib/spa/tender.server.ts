@@ -492,12 +492,13 @@ async function checkTenderSources() {
     const started = Date.now();
     try {
       const rows = await adapter.retrieve();
+      const cached = rows.find((row) => row.retrievalMethod === "cached");
       sources.push({
         sourceId: adapter.id,
         sourceName: adapter.name,
-        status: "success",
+        status: cached ? "limited" : "success",
         retrieved: rows.length,
-        error: null,
+        error: cached ? `Live refresh unavailable. Using official dataset snapshot retrieved ${cached.sourceRetrievedAt}; verify current availability at source.` : null,
         durationMs: Date.now() - started,
       });
     } catch (error) {
@@ -526,7 +527,7 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
   const closeTimestamp = parseAustralianLocalDate(raw.closingDateRaw, raw.timezone ?? "Australia/Sydney");
   const published = parseAustralianLocalDate(raw.publishedDateRaw, raw.timezone ?? "Australia/Sydney");
   const sourceClassification: TenderEvidence["classification"] =
-    raw.retrievalMethod === "search" ? "SOURCE_CLAIM" : "OBSERVED_FACT";
+    raw.retrievalMethod === "search" || raw.retrievalMethod === "cached" ? "SOURCE_CLAIM" : "OBSERVED_FACT";
   const evidence: TenderEvidence[] = [
     { statement: `Tender title: ${raw.tenderTitle}`, sourceUrl: raw.sourceUrl, classification: sourceClassification },
     { statement: `Issuer: ${raw.issuer}`, sourceUrl: raw.sourceUrl, classification: sourceClassification },
@@ -536,6 +537,13 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
   if (raw.retrievalMethod === "search") {
     evidence.push({
       statement: "Opportunity metadata was recovered from indexed official procurement material because direct retrieval from the source portal was unavailable from the application runtime.",
+      sourceUrl: raw.sourceUrl,
+      classification: "SOURCE_CLAIM",
+    });
+  }
+  if (raw.retrievalMethod === "cached") {
+    evidence.push({
+      statement: `Dated snapshot of the official Queensland Government dataset retrieved ${raw.sourceRetrievedAt}. Live refresh was unavailable; verify current scope, timing and availability at the official source.`,
       sourceUrl: raw.sourceUrl,
       classification: "SOURCE_CLAIM",
     });
@@ -578,7 +586,9 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
     documentedContractValue: raw.documentedContractValue,
     tenderDocumentLinks: [...new Set(raw.tenderDocumentLinks.map(canonicalUrl))],
     firstDiscovered: now,
-    lastChecked: now,
+    lastChecked: raw.retrievalMethod === "cached" ? raw.sourceRetrievedAt! : now,
+    retrievalMethod: raw.retrievalMethod ?? "direct",
+    sourceRetrievedAt: raw.sourceRetrievedAt ?? now,
     sourceStatus: raw.sourceStatus,
     workflowStatus: classifyClosing(closeTimestamp) === "expired" ? "Expired" : "New",
     assignedBusinessContexts,
@@ -594,6 +604,9 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
       ...(raw.retrievalMethod === "search"
         ? ["This record was recovered through indexed official-source search because direct source retrieval was blocked; confirm the live official notice before committing bid effort."]
         : []),
+      ...(raw.retrievalMethod === "cached"
+        ? [`Live retrieval failed. This record comes from a dated official-source snapshot (${raw.sourceRetrievedAt}), not a live confirmation.`]
+        : []),
     ],
     commercialHypotheses: [],
     questionsToAsk: [],
@@ -607,8 +620,8 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
       sourceName: raw.sourceName,
       sourceSpecificId: raw.sourceSpecificId,
       sourceUrl: raw.sourceUrl,
-      firstSeenAt: now,
-      lastSeenAt: now,
+      firstSeenAt: raw.sourceRetrievedAt ?? now,
+      lastSeenAt: raw.sourceRetrievedAt ?? now,
     }],
     materialChangeHistory: [],
     enrichmentModel: null,
@@ -682,7 +695,7 @@ function mergeRecord(existing: TenderRecord, fresh: TenderRecord, now: string) {
   const sourceRef = existing.sourceHistory.find((ref) =>
     ref.sourceName === fresh.sourceName && ref.sourceSpecificId === fresh.sourceSpecificId
   );
-  if (sourceRef) sourceRef.lastSeenAt = now;
+  if (sourceRef) sourceRef.lastSeenAt = fresh.sourceRetrievedAt ?? now;
   else existing.sourceHistory.push(...fresh.sourceHistory);
   if (classifyClosing(existing.normalizedCloseTimestamp) === "expired" && ["New", "Review", "Interested"].includes(existing.workflowStatus)) {
     existing.workflowStatus = "Expired";
@@ -825,7 +838,6 @@ export async function setTenderWorkflow(orgId: string, id: string, workflowStatu
     const record = store.records.find((item) => item.id === id);
     if (!record) throw new Error("Tender not found.");
     record.workflowStatus = workflowStatus;
-    record.lastChecked = new Date().toISOString();
     return record;
   });
 }
@@ -902,10 +914,13 @@ export async function runTenderScan(orgId: string, background = false): Promise<
         try {
           const rows = await adapter.retrieve();
           rawRows.push(...rows);
-          run.sourceSuccesses++;
+          const cached = rows.find((row) => row.retrievalMethod === "cached");
+          const warning = cached ? `Live refresh unavailable. Using official dataset snapshot retrieved ${cached.sourceRetrievedAt}; verify current availability at source.` : null;
+          if (cached) { run.sourceFailures++; run.errors.push(`${adapter.name}: ${warning}`); }
+          else run.sourceSuccesses++;
           run.sourceAttempts.push({
-            sourceId: adapter.id, sourceName: adapter.name, status: "success",
-            retrieved: rows.length, error: null, durationMs: Date.now() - sourceStart,
+            sourceId: adapter.id, sourceName: adapter.name, status: cached ? "limited" : "success",
+            retrieved: rows.length, error: warning, durationMs: Date.now() - sourceStart,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1027,17 +1042,27 @@ export async function runTenderScan(orgId: string, background = false): Promise<
             run.newTenders++;
             continue;
           }
+          if (fresh.retrievalMethod === "cached" && existing.retrievalMethod !== "cached") {
+            // A packaged snapshot must not overwrite a previously retrieved
+            // live or indexed record, including its confirmed deadline.
+            run.unchangedTenders++;
+            continue;
+          }
 
           const changed = !sameMaterial(existing, fresh);
           if (changed) {
             mergeRecord(existing, fresh, now);
             run.updatedTenders++;
           } else {
-            existing.lastChecked = now;
+            if (fresh.retrievalMethod !== "cached") {
+              existing.lastChecked = now;
+              existing.sourceRetrievedAt = fresh.sourceRetrievedAt;
+              existing.retrievalMethod = fresh.retrievalMethod;
+            }
             const ref = existing.sourceHistory.find((item) =>
               item.sourceName === fresh.sourceName && item.sourceSpecificId === fresh.sourceSpecificId
             );
-            if (ref) ref.lastSeenAt = now;
+            if (ref && fresh.retrievalMethod !== "cached") ref.lastSeenAt = now;
             if (classifyClosing(existing.normalizedCloseTimestamp) === "expired" && ["New", "Review", "Interested"].includes(existing.workflowStatus)) {
               existing.workflowStatus = "Expired";
             }

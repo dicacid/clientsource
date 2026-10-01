@@ -97,6 +97,8 @@ export type TenderRecord = {
   materialChangeHistory: TenderChange[];
   enrichmentModel: string | null;
   enrichedAt: string | null;
+  retrievalMethod?: "direct" | "search" | "cached";
+  sourceRetrievedAt?: string;
 };
 
 export type RawTender = {
@@ -118,7 +120,8 @@ export type RawTender = {
   documentedContractValue: string | null;
   tenderDocumentLinks: string[];
   sourceStatus: TenderRecord["sourceStatus"];
-  retrievalMethod?: "direct" | "search";
+  retrievalMethod?: "direct" | "search" | "cached";
+  sourceRetrievedAt?: string;
 };
 
 const MONTHS: Record<string, number> = {

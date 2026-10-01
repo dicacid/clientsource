@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import Papa from "papaparse";
 import { isOfficialAustralianProcurementUrl, type RawTender } from "./tenders.ts";
+import snapshot from "./data/queensland-pipeline-snapshot.json" with { type: "json" };
 
 const PORTAL = "https://www.data.qld.gov.au";
 const DATASET = "forward-procurement-pipeline";
 const FALLBACK_RESOURCE = "d3968658-dbb7-4732-bc19-467c49de23de";
 const MAX_BYTES = 4 * 1024 * 1024;
+const SNAPSHOT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const RELEVANT = /\b(?:solar|photovoltaic|pv|battery|batteries|bess|energy storage|renewable|microgrid|off[- ]grid|hybrid power|electric(?:al|ity)?|power (?:system|supply|infrastructure|station|generation)|generator|substation|transformer|switchboard|high voltage|low voltage|ev charging|electric vehicle|electrification|charging infrastructure|lithium|inverter|decarboni[sz]\w*|distributed energy|hydrogen)\b/i;
 
 type PipelineRow = Record<string, string | number | null>;
@@ -142,5 +144,14 @@ export async function retrieveQueenslandPipeline(): Promise<RawTender[]> {
   } catch (error) {
     failures.push(error instanceof Error ? error.message : "CKAN retrieval failed.");
   }
-  throw new Error(`Queensland pipeline retrieval failed: ${failures.join(" ")}`);
+  const age = Date.now() - Date.parse(snapshot.retrievedAt);
+  if (age >= 0 && age <= SNAPSHOT_MAX_AGE_MS) {
+    return snapshot.records.map((row) => ({
+      ...row,
+      sourceStatus: "unknown",
+      retrievalMethod: "cached",
+      sourceRetrievedAt: snapshot.retrievedAt,
+    })) as RawTender[];
+  }
+  throw new Error(`Queensland pipeline retrieval failed: ${failures.join(" ")} The dated fallback is too old to use.`);
 }

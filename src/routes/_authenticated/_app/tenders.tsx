@@ -35,6 +35,7 @@ function fmtDate(value: string | null) {
   if (!value) return "Unknown";
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Intl.DateTimeFormat("en-AU", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(parsed));
   return new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Sydney",
     day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit",
@@ -90,7 +91,7 @@ function ScanProgress({ run }: { run: TenderScanRun | null }) {
                   {source.status}
                 </span>
               </div>
-              <div className="mt-1 text-[10px] text-muted-foreground">
+                  <div className="mt-1 text-[10px] text-muted-foreground">
                 {source.retrieved} retrieved · {source.durationMs} ms
               </div>
               {source.error && <div className="mt-2 text-[10px] leading-4 text-amber-300">{source.error}</div>}
@@ -377,6 +378,7 @@ function TenderIntelligence() {
                   <a href={record.canonicalSourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm text-primary hover:underline">
                     {record.sourceName}<ExternalLink className="h-3 w-3" />
                   </a>
+                  {record.retrievalMethod === "cached" && <p className="mt-2 text-xs text-amber-300">Dated snapshot · {fmtDate(record.sourceRetrievedAt ?? null)}. Live refresh unavailable.</p>}
                   <div className="mt-2">
                     <Link to="/tenders/$tenderId" params={{ tenderId: record.id }} className="text-xs font-medium hover:text-primary">Open intelligence →</Link>
                   </div>

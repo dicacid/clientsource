@@ -54,13 +54,15 @@ and StageTrace services were not modified.
 
 ## Validation before deployment
 
-- 39 automated tests passed.
+- 41 automated tests passed.
 - Production build and TypeScript check passed.
 - The new adapter retrieved the live official Queensland dataset from the test
   environment: 905 total rows, 21 relevant forward procurements.
 - A real isolated Redis integration check verified immediate background start,
   duplicate-run protection, partial failure status, persistence, deduplication,
-  preserved notes/workflow, deadline-change audit, lock release and stale recovery.
+  preserved notes/workflow, deadline-change audit, lock release, stale recovery,
+  dated fallback status, protection of previously direct records and source
+  check dates preserved during workflow edits.
 - Local production HTTP checks returned 200 for sign-in, health and protected
   route shells; unauthorized cron invocation returned 401. Route-shell checks do
   not establish an authenticated workflow or AI execution.
@@ -74,8 +76,20 @@ claim safe horizontal scaling. No datastore migration or Supabase was added.
 
 An authenticated production session and an authorized AI request were not
 available in the audit browser. AI validation tests used controlled responses.
-Direct portal availability and production ingestion must be checked after deploy;
-HTTP 403 coverage gaps cannot be claimed fixed by parser changes.
+The first deployment's live diagnostics confirmed that Queensland returns empty
+response bodies from Render while the official feed remains readable from the
+test environment. The follow-up adds 21 normalized records from that verified
+official feed as a dated fallback (retrieved 1 October, publisher update
+18 September, CC BY 4.0). Cached records explicitly retain unknown availability,
+show their retrieval date and are labelled in source diagnostics, list and detail
+views. The fallback expires after 30 days and cannot overwrite a previously live
+record. It is not a claim that Render can refresh the dataset automatically.
+
+Victoria, ACT, NSW and AusTender still return HTTP 403. These coverage gaps remain
+visible; parser changes cannot be claimed to fix them. Tasmania and Townsville
+were directly reachable in the production source check. The first GitHub CI run
+rejected the initial lockfile; it was regenerated with CI's npm version and
+validated with a clean install before the follow-up commit.
 
 Primary references:
 
