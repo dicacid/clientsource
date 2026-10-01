@@ -78,6 +78,25 @@ type ProspectDossier = {
   created_at: string;
 };
 
+type PartyEvent = {
+  id: string;
+  organization_id: string;
+  name: string;
+  concept: string;
+  location: string;
+  date_window: string;
+  attendance: string;
+  vibe: string;
+  status: string;
+  requirements: string[];
+  resources: unknown[];
+  notes: string;
+  created_by: string;
+  updated_by: string;
+  updated_at: string;
+  created_at: string;
+};
+
 type State = {
   users: User[];
   profiles: Profile[];
@@ -88,6 +107,7 @@ type State = {
   contacts: Contact[];
   activities: Activity[];
   prospect_dossiers: ProspectDossier[];
+  party_events: PartyEvent[];
 };
 
 type Filter = {
@@ -100,7 +120,7 @@ type Filter = {
 type Order = { column: string; ascending: boolean; nullsFirst?: boolean };
 
 export type DbRequest = {
-  table: keyof Pick<State, "profiles" | "organizations" | "organization_members" | "pending_invites" | "companies" | "contacts" | "activities" | "prospect_dossiers">;
+  table: keyof Pick<State, "profiles" | "organizations" | "organization_members" | "pending_invites" | "companies" | "contacts" | "activities" | "prospect_dossiers" | "party_events">;
   action: "select" | "insert" | "update" | "delete";
   payload?: unknown;
   filters?: Filter[];
@@ -134,6 +154,7 @@ function emptyState(): State {
     contacts: [],
     activities: [],
     prospect_dossiers: [],
+    party_events: [],
   };
 }
 
@@ -436,6 +457,21 @@ function withDefaults(table: DbRequest["table"], input: any, userId: string) {
     row.contact_id ??= null;
     row.created_by = userId;
   }
+  if (table === "party_events") {
+    row.name = String(row.name ?? "").trim().slice(0, 200);
+    row.concept = String(row.concept ?? "").slice(0, 4000);
+    row.location = String(row.location ?? "").slice(0, 300);
+    row.date_window = String(row.date_window ?? "").slice(0, 200);
+    row.attendance = String(row.attendance ?? "").slice(0, 120);
+    row.vibe = String(row.vibe ?? "").slice(0, 1000);
+    row.status = ["idea", "shaping", "ready_for_handoff"].includes(String(row.status)) ? String(row.status) : "idea";
+    row.requirements = Array.isArray(row.requirements) ? row.requirements.slice(0, 100) : [];
+    row.resources = Array.isArray(row.resources) ? row.resources.slice(0, 300) : [];
+    row.notes = String(row.notes ?? "").slice(0, 8000);
+    row.created_by = userId;
+    row.updated_by = userId;
+    row.updated_at = now;
+  }
   if (table === "prospect_dossiers") {
     row.industry ??= null;
     row.country ??= null;
@@ -529,6 +565,20 @@ function updateRows(state: State, request: DbRequest, userId: string): any[] {
       if (allowed && !allowed.includes(key)) continue;
       row[key] = table === "companies" && key === "website" ? normalizeWebsite(value) : value;
     }
+    if (table === "party_events") {
+      row.updated_by = userId;
+      row.updated_at = new Date().toISOString();
+      row.name = String(row.name ?? "").trim().slice(0, 200);
+      row.concept = String(row.concept ?? "").slice(0, 4000);
+      row.location = String(row.location ?? "").slice(0, 300);
+      row.date_window = String(row.date_window ?? "").slice(0, 200);
+      row.attendance = String(row.attendance ?? "").slice(0, 120);
+      row.vibe = String(row.vibe ?? "").slice(0, 1000);
+      row.status = ["idea", "shaping", "ready_for_handoff"].includes(String(row.status)) ? String(row.status) : "idea";
+      row.requirements = Array.isArray(row.requirements) ? row.requirements.slice(0, 100) : [];
+      row.resources = Array.isArray(row.resources) ? row.resources.slice(0, 300) : [];
+      row.notes = String(row.notes ?? "").slice(0, 8000);
+    }
   }
   return candidates;
 }
@@ -603,6 +653,7 @@ export async function executeDbRequest(userId: string, request: DbRequest): Prom
       "contacts",
       "activities",
       "prospect_dossiers",
+      "party_events",
     ]);
     const allowedActions = new Set(["select", "insert", "update", "delete"]);
     if (!allowedTables.has(String(request.table)) || !allowedActions.has(String(request.action))) {
