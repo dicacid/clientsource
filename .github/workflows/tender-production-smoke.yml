@@ -1,0 +1,51 @@
+name: Tender production smoke
+on:
+  push:
+    branches:
+      - spa-tender-prod-smoke-1001
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify deployed Tender Intelligence
+        run: |
+          node <<'NODE'
+          const base = "https://spa-intelligence.onrender.com";
+
+          async function fetchText(path) {
+            const response = await fetch(base + path, {
+              redirect: "follow",
+              headers: { "user-agent": "SPA-Intelligence-production-smoke/1.0" },
+              signal: AbortSignal.timeout(45000),
+            });
+            const text = await response.text();
+            console.log("\n--- " + path + " " + response.status + " ---\n" + text.slice(0, 12000));
+            if (response.status >= 500) throw new Error(path + " returned " + response.status);
+            return { response, text };
+          }
+
+          const health = await fetchText("/health");
+          if (!health.text.includes('"ok": true') && !health.text.includes('&quot;ok&quot;: true')) {
+            throw new Error("/health did not report ok=true");
+          }
+          for (const check of ["timezoneNormalisation", "closingBand", "deterministicIdentity", "routesSpa", "routesSolarOnline", "routesElmofo"]) {
+            if (!health.text.includes(check)) throw new Error("/health missing tender core check " + check);
+          }
+
+          const source = await fetchText("/api/tenders/source-health");
+          const data = JSON.parse(source.text);
+          if (!Array.isArray(data.sources)) throw new Error("source-health returned no sources array");
+          const successful = data.sources.filter((item) => item.status === "success" && item.retrieved > 0);
+          console.log("Successful real procurement adapters:", successful.map((x) => x.sourceName + "=" + x.retrieved).join(", "));
+          if (!successful.length) throw new Error("No real procurement source returned tender records");
+
+          const tenders = await fetchText("/tenders");
+          if (!/Tender Intelligence|Sign in|SPA Intelligence/i.test(tenders.text)) {
+            throw new Error("/tenders did not return an application/auth surface");
+          }
+          NODE
