@@ -82,7 +82,7 @@ function AppLayout() {
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center bg-white p-1">
               <img
-                src="https://solarpoweraustralia.com.au/wp-content/uploads/2021/05/Solar-power-footer-logo.svg"
+                src="/spa-logo-192.png"
                 alt="Solar Power Australia"
                 className="max-h-full max-w-full"
               />
