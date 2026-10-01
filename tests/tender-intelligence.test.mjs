@@ -96,3 +96,22 @@ test("normalises Townsville council numeric closing times", () => {
     "2019-07-26T07:00:00.000Z",
   );
 });
+
+
+test("planned procurement receives stage credit without inventing a closing date", () => {
+  const fits = businessRouting("planned procurement for battery energy storage and solar equipment");
+  const result = scoreTender({
+    title: "Battery energy storage procurement",
+    summary: "Estimated release to market in a future quarter",
+    category: "Energy",
+    state: "QLD",
+    sourceName: "Queensland Government Forward Procurement Pipeline",
+    sourceStatus: "planned",
+    normalizedCloseTimestamp: null,
+    businessFits: fits,
+    evidenceCount: 4,
+  });
+  assert.ok(result.score > 0);
+  assert.equal(result.factors.find((factor) => factor.factor === "Opportunity stage")?.score, 5);
+  assert.equal(result.factors.find((factor) => factor.factor === "Closing-date timing")?.explanation, "Closing band: unknown.");
+});
