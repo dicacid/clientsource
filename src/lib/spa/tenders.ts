@@ -121,8 +121,18 @@ export type RawTender = {
 };
 
 const MONTHS: Record<string, number> = {
-  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
-  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  january: 0, jan: 0,
+  february: 1, feb: 1,
+  march: 2, mar: 2,
+  april: 3, apr: 3,
+  may: 4,
+  june: 5, jun: 5,
+  july: 6, jul: 6,
+  august: 7, aug: 7,
+  september: 8, sep: 8, sept: 8,
+  october: 9, oct: 9,
+  november: 10, nov: 10,
+  december: 11, dec: 11,
 };
 
 export function normalizeTenderText(value: string) {
@@ -156,21 +166,25 @@ export function parseAustralianLocalDate(input: string | null, timeZone = "Austr
   if (!input) return null;
   const value = input.trim().replace(/([ap])\.m\./gi, "$1m");
   const wordMatch = value.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  const compactMatch = value.match(/^(\d{1,2})-([A-Za-z]{3,9})-(\d{4})\s+(\d{1,2}):(\d{2})(?:\s*(am|pm))?$/i);
   const numericMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-?\s*(\d{1,2}):(\d{2})\s*(am|pm))?$/i);
-  const m = wordMatch ?? numericMatch;
+  const m = wordMatch ?? compactMatch ?? numericMatch;
   if (!m) {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
   }
   const day = Number(m[1]);
-  const month = wordMatch ? MONTHS[m[2]!.toLowerCase()] : Number(m[2]) - 1;
+  const month = wordMatch || compactMatch ? MONTHS[m[2]!.toLowerCase()] : Number(m[2]) - 1;
   const year = Number(m[3]);
   if (month == null || !day || !year) return null;
   let hour = Number(m[4] ?? 0);
   const minute = Number(m[5] ?? 0);
-  const meridiem = String(m[6] ?? "am").toLowerCase();
-  if (hour === 12) hour = 0;
-  if (meridiem === "pm") hour += 12;
+  const meridiem = m[6] ? String(m[6]).toLowerCase() : null;
+  if (meridiem) {
+    if (hour === 12) hour = 0;
+    if (meridiem === "pm") hour += 12;
+  }
+  if (hour > 23 || minute > 59) return null;
 
   const targetWallClock = Date.UTC(year, month, day, hour, minute, 0);
   let guess = targetWallClock;
@@ -269,7 +283,7 @@ export function scoreTender(input: {
   const fitScore = Math.round(bestFit * 0.45);
   const capabilityScore = Math.min(20, input.businessFits.reduce((sum, fit) => sum + fit.matchedCapabilities.length * 3, 0));
   const geographyScore = input.state && /NSW|VIC|QLD|SA|WA|TAS|ACT|NT/i.test(input.state) ? 8 : 5;
-  const sourceScore = /government|victoria|nsw|austender|council|water|utility/i.test(input.sourceName + " " + input.title) ? 10 : 6;
+  const sourceScore = /government|victoria|\bnsw\b|\bact\b|austender|council|data\.gov\.au|water|utility/i.test(input.sourceName + " " + input.title) ? 10 : 6;
   const stageScore = input.sourceStatus === "open" ? 8 : input.sourceStatus === "awarded" ? 2 : 0;
   const closingBand = classifyClosing(input.normalizedCloseTimestamp);
   const urgencyScore = closingBand === "within_7d" ? 4 : closingBand === "within_14d" ? 6 : closingBand === "later" ? 8 : closingBand === "within_48h" ? 1 : 3;
@@ -350,6 +364,92 @@ export function parseConsolidatedTenderText(text: string, config: ConsolidatedTe
       country: "Australia",
       state: config.state,
       location: config.location,
+      documentedContractValue: null,
+      tenderDocumentLinks: [],
+      sourceStatus: "open",
+    });
+  }
+  return rows;
+}
+
+
+function looksLikeNswReference(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length < 2 || trimmed.length > 120 || !/\d/.test(trimmed)) return false;
+  if (/^(?:closes?|page|displaying|sort|category|location|opportunity type|agency)\b/i.test(trimmed)) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9 ._\/()&-]*$/.test(trimmed);
+}
+
+export function parseNswOpportunityText(text: string, sourceUrl: string): RawTender[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const rows: RawTender[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^Closes:\s*/i.test(lines[i]!)) continue;
+
+    const close = lines[i]!.replace(/^Closes:\s*/i, "").trim();
+    let title = "";
+    for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+      const candidate = lines[j]!.replace(/^#+\s*/, "").trim();
+      if (!candidate || /^\*?$/.test(candidate) || /^Displaying\b/i.test(candidate) || /^Sort results/i.test(candidate)) continue;
+      title = candidate;
+      break;
+    }
+    if (!title) continue;
+
+    let opportunityTypeIndex = -1;
+    for (let j = i + 1; j < Math.min(lines.length, i + 30); j++) {
+      if (/^Opportunity type$/i.test(lines[j]!)) {
+        opportunityTypeIndex = j;
+        break;
+      }
+      if (/^Closes:/i.test(lines[j]!)) break;
+    }
+    if (opportunityTypeIndex < 0) continue;
+
+    let referenceIndex = -1;
+    for (let j = i + 1; j < opportunityTypeIndex; j++) {
+      if (looksLikeNswReference(lines[j]!)) {
+        referenceIndex = j;
+        break;
+      }
+    }
+    if (referenceIndex < 0) continue;
+
+    const reference = lines[referenceIndex]!.trim();
+    const categories = lines.slice(i + 1, referenceIndex)
+      .filter((line) => !/^(?:Other|Details?)$/i.test(line))
+      .join(" · ")
+      .slice(0, 500) || null;
+    const summary = lines.slice(referenceIndex + 1, opportunityTypeIndex)
+      .filter((line) => !/^(?:See details|Details)$/i.test(line))
+      .join(" ")
+      .trim()
+      .slice(0, 2000) || null;
+    const opportunityType = String(lines[opportunityTypeIndex + 1] ?? "Tender").trim();
+    const agencyIndex = lines.findIndex((line, idx) => idx > opportunityTypeIndex && idx < opportunityTypeIndex + 8 && /^Agency$/i.test(line));
+    const issuer = agencyIndex >= 0 ? String(lines[agencyIndex + 1] ?? "").trim() : "";
+    if (!issuer) continue;
+
+    rows.push({
+      sourceName: "buy.nsw Opportunities Hub",
+      sourceSpecificId: reference,
+      sourceUrl,
+      tenderTitle: title.slice(0, 500),
+      issuer: issuer.slice(0, 240),
+      referenceNumber: reference,
+      opportunityType: opportunityType.slice(0, 120),
+      category: categories,
+      summary,
+      publishedDateRaw: null,
+      closingDateRaw: close,
+      timezone: "Australia/Sydney",
+      country: "Australia",
+      state: "NSW",
+      location: "New South Wales",
       documentedContractValue: null,
       tenderDocumentLinks: [],
       sourceStatus: "open",

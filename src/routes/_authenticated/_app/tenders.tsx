@@ -76,6 +76,27 @@ function ScanProgress({ run }: { run: TenderScanRun | null }) {
         <div>New / updated: {run.newTenders} / {run.updatedTenders}</div>
         <div>AI enrichments: {run.aiEnrichments}</div>
       </div>
+      {!!run.sourceAttempts.length && (
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {run.sourceAttempts.map((source) => (
+            <div key={source.sourceId} className="border border-border/80 bg-background/60 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium">{source.sourceName}</span>
+                <span className={
+                  "font-mono text-[9px] uppercase " +
+                  (source.status === "success" ? "text-emerald-400" : source.status === "limited" ? "text-amber-300" : "text-destructive")
+                }>
+                  {source.status}
+                </span>
+              </div>
+              <div className="mt-1 text-[10px] text-muted-foreground">
+                {source.retrieved} retrieved · {source.durationMs} ms
+              </div>
+              {source.error && <div className="mt-2 text-[10px] leading-4 text-amber-300">{source.error}</div>}
+            </div>
+          ))}
+        </div>
+      )}
       {!!run.errors.length && (
         <div className="mt-3 border-l-2 border-amber-500/50 pl-3 text-xs text-amber-300">
           {run.errors.slice(-3).map((error) => <div key={error}>{error}</div>)}

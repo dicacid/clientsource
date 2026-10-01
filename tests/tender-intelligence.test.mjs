@@ -6,6 +6,7 @@ import {
   deterministicTenderKey,
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
+  parseNswOpportunityText,
   scoreTender,
 } from "../src/lib/spa/tenders.ts";
 
@@ -95,4 +96,37 @@ test("normalises Townsville council numeric closing times", () => {
     parseAustralianLocalDate("26/07/2019 - 5:00 p.m.", "Australia/Brisbane"),
     "2019-07-26T07:00:00.000Z",
   );
+});
+
+
+test("normalises NSW 24-hour tender closing times in Sydney timezone", () => {
+  assert.equal(
+    parseAustralianLocalDate("19-Oct-2026 15:00", "Australia/Sydney"),
+    "2026-10-19T04:00:00.000Z",
+  );
+});
+
+test("parses buy.nsw opportunity listing records with category and summary evidence", () => {
+  const rows = parseNswOpportunityText(
+    [
+      "Displaying 1-10 of 92 results",
+      "Property and Facilities Management Tender",
+      "Closes: 19-Oct-2026 15:00",
+      "Building and property - Facility maintenance",
+      "Professional Services (excl Consultancies)",
+      "RFT-2016902",
+      "Create NSW is seeking a suitably qualified property management firm to manage its properties.",
+      "Opportunity type",
+      "Request for tender (RFT)",
+      "Agency",
+      "Department of Creative Industries, Tourism, Hospitality and Sport",
+      "See details",
+    ].join("\n"),
+    "https://buy.nsw.gov.au/opportunity/search?types=Tenders&page=0",
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].referenceNumber, "RFT-2016902");
+  assert.equal(rows[0].issuer, "Department of Creative Industries, Tourism, Hospitality and Sport");
+  assert.equal(rows[0].category, "Building and property - Facility maintenance · Professional Services (excl Consultancies)");
+  assert.match(rows[0].summary ?? "", /suitably qualified/i);
 });

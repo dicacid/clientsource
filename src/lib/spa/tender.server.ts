@@ -10,6 +10,7 @@ import {
   highRelevance,
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
+  parseNswOpportunityText,
   scoreTender,
   secondaryTenderKey,
   type RawTender,
@@ -145,6 +146,24 @@ function decodeHtml(input: string) {
     .trim();
 }
 
+function decodeHtmlLines(input: string) {
+  return input
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "\n")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&ndash;/gi, "–")
+    .replace(/&mdash;/gi, "—")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 function parseVictoriaPage(html: string, page: number): RawTender[] {
   return parseConsolidatedTenderText(decodeHtml(html), {
     sourceName: "Buying for Victoria",
@@ -264,43 +283,33 @@ const nswAdapter: TenderSourceAdapter = {
   id: "buy-nsw",
   name: "buy.nsw Opportunities Hub",
   async retrieve() {
-    const url = "https://buy.nsw.gov.au/opportunity/search?types=Tenders";
-    const html = await fetchedText(url, 12000);
-    const text = decodeHtml(html);
-    const matcher = /(.+?)\s+Closes:\s+(\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{2}:\d{2})[\s\S]{0,700}?([A-Z0-9][A-Z0-9._\/-]{2,80})[\s\S]{0,1000}?Opportunity type\s+(.+?)\s+Agency\s+(.+?)\s+See details/gi;
-    const rows: RawTender[] = [];
-    let match: RegExpExecArray | null;
-    while ((match = matcher.exec(text)) !== null) {
-      const title = String(match[1] ?? "").trim().split(/Displaying \d+-\d+ of \d+ results/i).pop()!.trim();
-      const close = String(match[2] ?? "").trim();
-      const reference = String(match[3] ?? "").trim();
-      const type = String(match[4] ?? "").trim();
-      const issuer = String(match[5] ?? "").trim();
-      if (!title || !reference || !issuer) continue;
-      const parsed = Date.parse(close.replace(/-/g, " "));
-      rows.push({
-        sourceName: "buy.nsw Opportunities Hub",
-        sourceSpecificId: reference,
-        sourceUrl: url,
-        tenderTitle: title.slice(-500),
-        issuer: issuer.slice(0, 240),
-        referenceNumber: reference,
-        opportunityType: type.slice(0, 120),
-        category: null,
-        summary: null,
-        publishedDateRaw: null,
-        closingDateRaw: Number.isFinite(parsed) ? new Date(parsed).toISOString() : close,
-        timezone: "Australia/Sydney",
-        country: "Australia",
-        state: "NSW",
-        location: "New South Wales",
-        documentedContractValue: null,
-        tenderDocumentLinks: [],
-        sourceStatus: "open",
-      });
+    const firstUrl = "https://buy.nsw.gov.au/opportunity/search?types=Tenders&page=0";
+    const firstHtml = await fetchedText(firstUrl, 15000);
+    const firstText = decodeHtmlLines(firstHtml);
+    const firstRows = parseNswOpportunityText(firstText, firstUrl);
+
+    const totalMatch = firstText.match(/Displaying\s+\d+\s*-\s*\d+\s+of\s+(\d+)\s+results/i);
+    const total = totalMatch ? Number(totalMatch[1]) : firstRows.length;
+    const pageCount = Math.max(1, Math.min(15, Math.ceil((Number.isFinite(total) ? total : firstRows.length) / 10)));
+
+    const rows = [...firstRows];
+    for (let page = 1; page < pageCount; page += 4) {
+      const batch = Array.from({ length: Math.min(4, pageCount - page) }, (_, offset) => page + offset);
+      const results = await Promise.allSettled(batch.map(async (pageNumber) => {
+        const url = `https://buy.nsw.gov.au/opportunity/search?types=Tenders&page=${pageNumber}`;
+        const html = await fetchedText(url, 15000);
+        return parseNswOpportunityText(decodeHtmlLines(html), url);
+      }));
+      for (const result of results) {
+        if (result.status === "fulfilled") rows.push(...result.value);
+      }
     }
-    if (!rows.length) throw new Error("NSW opportunity index is currently not reliably machine-retrievable from the Render runtime.");
-    return rows;
+
+    const unique = new Map<string, RawTender>();
+    for (const row of rows) unique.set(row.sourceSpecificId, row);
+    const result = [...unique.values()];
+    if (!result.length) throw new Error("NSW opportunity index is currently not reliably machine-retrievable from the Render runtime.");
+    return result;
   },
 };
 
