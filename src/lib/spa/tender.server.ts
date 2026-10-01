@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import Papa from "papaparse";
 import { createClient, type RedisClientType } from "redis";
 import { getAiRuntime } from "./openrouter.server";
 import { requestJsonResponse } from "./json-response.server";
@@ -279,28 +280,52 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
       success?: boolean;
       result?: { records?: QldForwardRow[]; total?: number };
     };
-    const pageSize = 100;
-    const firstUrl = apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=0`);
-    const first = await fetchedJson<QldPayload>(firstUrl, 18000);
-    if (!first.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
+    let records: QldForwardRow[] = [];
+    try {
+      const pageSize = 100;
+      const firstUrl = apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=0`);
+      const first = await fetchedJson<QldPayload>(firstUrl, 18000);
+      if (!first.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
 
-    const total = Number(first.result?.total ?? first.result?.records?.length ?? 0);
-    const records = [...(first.result?.records ?? [])];
-    const offsets = Array.from(
-      { length: Math.max(0, Math.ceil(total / pageSize) - 1) },
-      (_, index) => (index + 1) * pageSize,
-    );
-    for (let i = 0; i < offsets.length; i += 4) {
-      const batch = offsets.slice(i, i + 4);
-      const pages = await Promise.all(batch.map((offset) =>
-        fetchedJson<QldPayload>(
-          apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=${offset}`),
-          18000,
-        )
-      ));
-      for (const page of pages) {
-        if (!page.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
-        records.push(...(page.result?.records ?? []));
+      const total = Number(first.result?.total ?? first.result?.records?.length ?? 0);
+      records.push(...(first.result?.records ?? []));
+      const offsets = Array.from(
+        { length: Math.max(0, Math.ceil(total / pageSize) - 1) },
+        (_, index) => (index + 1) * pageSize,
+      );
+      for (let i = 0; i < offsets.length; i += 4) {
+        const batch = offsets.slice(i, i + 4);
+        const pages = await Promise.all(batch.map((offset) =>
+          fetchedJson<QldPayload>(
+            apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=${offset}`),
+            18000,
+          )
+        ));
+        for (const page of pages) {
+          if (!page.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
+          records.push(...(page.result?.records ?? []));
+        }
+      }
+    } catch (apiError) {
+      const csvUrl = "https://www.data.qld.gov.au/dataset/2ee69f84-0495-46b4-8640-af85b148f16b/resource/" +
+        resourceId + "/download/forward-procurement-pipeline-sept-2026.csv";
+      const response = await fetch(csvUrl, {
+        headers: {
+          Accept: "text/csv,text/plain,*/*",
+          "User-Agent": "SPA-Intelligence-Tender-Monitor/1.0 (+https://spa-intelligence.onrender.com)",
+        },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) {
+        const detail = apiError instanceof Error ? apiError.message : String(apiError);
+        throw new Error(`Queensland CKAN API failed (${detail}) and CSV fallback returned HTTP ${response.status}.`);
+      }
+      const csv = await response.text();
+      const parsed = Papa.parse<QldForwardRow>(csv, { header: true, skipEmptyLines: "greedy" });
+      records = parsed.data.filter((row) => row && Object.keys(row).length > 0);
+      if (!records.length) {
+        const detail = apiError instanceof Error ? apiError.message : String(apiError);
+        throw new Error(`Queensland CKAN API failed (${detail}) and CSV fallback contained no records.`);
       }
     }
 
