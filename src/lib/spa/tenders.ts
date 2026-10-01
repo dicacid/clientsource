@@ -154,19 +154,21 @@ export function secondaryTenderKey(raw: Pick<RawTender, "issuer" | "tenderTitle"
 
 export function parseAustralianLocalDate(input: string | null, timeZone = "Australia/Melbourne"): string | null {
   if (!input) return null;
-  const value = input.trim();
-  const m = value.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  const value = input.trim().replace(/\b([ap])\.m\.\b/gi, "$1m");
+  const wordMatch = value.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  const numericMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-?\s*(\d{1,2}):(\d{2})\s*(am|pm))?$/i);
+  const m = wordMatch ?? numericMatch;
   if (!m) {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
   }
   const day = Number(m[1]);
-  const month = MONTHS[m[2]!.toLowerCase()];
+  const month = wordMatch ? MONTHS[m[2]!.toLowerCase()] : Number(m[2]) - 1;
   const year = Number(m[3]);
   if (month == null || !day || !year) return null;
-  let hour = Number(m[4]);
-  const minute = Number(m[5]);
-  const meridiem = m[6]!.toLowerCase();
+  let hour = Number(m[4] ?? 0);
+  const minute = Number(m[5] ?? 0);
+  const meridiem = String(m[6] ?? "am").toLowerCase();
   if (hour === 12) hour = 0;
   if (meridiem === "pm") hour += 12;
 
