@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "npm test && vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "node --experimental-transform-types --test tests/*.test.mjs"
+    "test": "node --experimental-transform-types --test tests/*.test.mjs",
+    "tenders:scan": "node scripts/run-tender-cron.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
