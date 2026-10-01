@@ -167,6 +167,67 @@ async function fetchedText(url: string, timeout = 15000) {
   return response.text();
 }
 
+async function fetchedJson<T>(url: string, timeout = 12000): Promise<T> {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "SPA-Intelligence-Tender-Monitor/1.0 (+https://spa-intelligence.onrender.com)",
+    },
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  return response.json() as Promise<T>;
+}
+
+const townsvilleAdapter: TenderSourceAdapter = {
+  id: "townsville-council-data",
+  name: "Townsville City Council Open Data",
+  async retrieve() {
+    const resourceId = "3d8af8cc-9450-4079-ad23-2fbdbc1f6488";
+    const sourceUrl = "https://data.gov.au/data/dataset/townsville-city-council-tender-activities";
+    const apiUrl = "https://data.gov.au/data/api/3/action/datastore_search?resource_id=" +
+      resourceId + "&limit=100&filters=%7B%22Status%22%3A%22Open%22%7D";
+    type TownsvilleRow = {
+      "_id"?: number;
+      "RFx No"?: string;
+      "Tender Type"?: string;
+      "Notice Type"?: string;
+      "Status"?: string;
+      "Summary"?: string;
+      "Release Date"?: string;
+      "Closed Date/Time"?: string;
+    };
+    const payload = await fetchedJson<{ success?: boolean; result?: { records?: TownsvilleRow[] } }>(apiUrl);
+    if (!payload.success) throw new Error("data.gov.au returned an unsuccessful CKAN response.");
+    const records = payload.result?.records ?? [];
+    return records.flatMap((row) => {
+      const reference = String(row["RFx No"] ?? "").trim();
+      const title = String(row["Summary"] ?? "").trim();
+      if (!reference || !title) return [];
+      return [{
+        sourceName: "Townsville City Council Open Data",
+        sourceSpecificId: reference,
+        sourceUrl,
+        tenderTitle: title.slice(0, 500),
+        issuer: "Townsville City Council",
+        referenceNumber: reference,
+        opportunityType: String(row["Notice Type"] ?? row["Tender Type"] ?? "Tender").trim(),
+        category: String(row["Tender Type"] ?? "").trim() || null,
+        summary: title,
+        publishedDateRaw: String(row["Release Date"] ?? "").trim() || null,
+        closingDateRaw: String(row["Closed Date/Time"] ?? "").trim() || null,
+        timezone: "Australia/Brisbane",
+        country: "Australia",
+        state: "QLD",
+        location: "Townsville, Queensland",
+        documentedContractValue: null,
+        tenderDocumentLinks: [],
+        sourceStatus: "open" as const,
+      }];
+    });
+  },
+};
+
 const victoriaAdapter: TenderSourceAdapter = {
   id: "buying-for-victoria",
   name: "Buying for Victoria",
@@ -255,7 +316,7 @@ const ausTenderAdapter: TenderSourceAdapter = {
   },
 };
 
-const ADAPTERS: TenderSourceAdapter[] = [victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
+const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
 
 export async function tenderSourceHealth() {
   const sources: Array<{
