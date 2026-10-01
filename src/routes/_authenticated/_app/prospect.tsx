@@ -401,50 +401,75 @@ function ProspectPage() {
         </div>
       )}
 
-      <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_160px_auto] sm:items-end">
-        <div className="space-y-1.5">
-          <Label htmlFor="p-name">Your name</Label>
-          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+      <form onSubmit={start} className="space-y-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="p-name" className="text-sm font-medium">Your name</Label>
+            <Input
+              id="p-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jane Doe"
+              className="h-11 w-full text-base"
+            />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="p-email" className="text-sm font-medium">Your email</Label>
+            <Input
+              id="p-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className="h-11 w-full text-base"
+            />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="p-site" className="text-sm font-medium">SPA business profile</Label>
+            <Input
+              id="p-site"
+              value={website}
+              readOnly
+              className="h-11 w-full bg-muted/40 text-base"
+            />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="p-region" className="text-sm font-medium">Target region</Label>
+            <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
+              <SelectTrigger id="p-region" className="h-11 w-full text-base">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="domestic">Domestic (Australia)</SelectItem>
+                <SelectItem value="international">International</SelectItem>
+                <SelectItem value="both">Both</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-email">Your email</Label>
-          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-site">SPA business profile</Label>
-          <Input id="p-site" value={website} readOnly className="bg-muted/40" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-region">Target region</Label>
-          <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
-            <SelectTrigger id="p-region">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="domestic">Domestic (Australia)</SelectItem>
-              <SelectItem value="international">International</SelectItem>
-              <SelectItem value="both">Both</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5 sm:col-span-5">
-          <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
+
+        <div className="space-y-2">
+          <Label htmlFor="p-claims" className="text-sm font-medium">Approved campaign claims (optional)</Label>
           <Textarea
             id="p-claims"
             value={claims}
             onChange={(e) => changeClaims(e.target.value)}
-            rows={3}
-            placeholder="One per line"
+            rows={4}
+            placeholder="Add approved facts or campaign angles, one per line."
             disabled={!domainKey}
+            className="min-h-28 w-full resize-y text-base leading-6"
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
             Facts you personally approve for this sender, e.g. runs alongside existing tools; setup takes about five minutes. Saved for {domainKey || "this website"} only.
           </p>
         </div>
-        <Button type="submit" disabled={busy} className="gap-2 sm:col-start-5">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {prefillTarget ? "Research selected prospect" : "Find prospects"}
-        </Button>
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={busy} className="h-11 w-full gap-2 px-6 text-base sm:w-auto sm:min-w-48">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {prefillTarget ? "Research selected prospect" : "Find prospects"}
+          </Button>
+        </div>
       </form>
 
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
