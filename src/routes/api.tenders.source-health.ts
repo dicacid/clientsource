@@ -7,7 +7,7 @@ export const Route = createFileRoute("/api/tenders/source-health")({
       GET: async () => {
         const result = await tenderSourceHealth();
         return Response.json(result, {
-          status: result.state === "failed" ? 503 : 200,
+          status: 200,
           headers: { "Cache-Control": "no-store" },
         });
       },
