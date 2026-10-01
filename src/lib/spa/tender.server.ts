@@ -273,6 +273,50 @@ const ausTenderAdapter: TenderSourceAdapter = {
 
 const ADAPTERS: TenderSourceAdapter[] = [victoriaAdapter, nswAdapter, ausTenderAdapter];
 
+export async function tenderSourceHealth() {
+  const sources: Array<{
+    sourceId: string;
+    sourceName: string;
+    status: "success" | "failed" | "limited";
+    retrieved: number;
+    error: string | null;
+    durationMs: number;
+  }> = [];
+
+  for (const adapter of ADAPTERS) {
+    const started = Date.now();
+    try {
+      const rows = await adapter.retrieve();
+      sources.push({
+        sourceId: adapter.id,
+        sourceName: adapter.name,
+        status: "success",
+        retrieved: rows.length,
+        error: null,
+        durationMs: Date.now() - started,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      sources.push({
+        sourceId: adapter.id,
+        sourceName: adapter.name,
+        status: /parser|reliably|stable public feed/i.test(message) ? "limited" : "failed",
+        retrieved: 0,
+        error: message,
+        durationMs: Date.now() - started,
+      });
+    }
+  }
+
+  return {
+    checkedAt: new Date().toISOString(),
+    state: sources.some((source) => source.status === "success")
+      ? (sources.every((source) => source.status === "success") ? "success" : "partial")
+      : "failed",
+    sources,
+  };
+}
+
 function normalizeRaw(raw: RawTender, now: string): TenderRecord {
   const closeTimestamp = raw.closingDateRaw?.includes("T")
     ? (Number.isFinite(Date.parse(raw.closingDateRaw)) ? new Date(raw.closingDateRaw).toISOString() : null)
@@ -557,6 +601,19 @@ export async function saveTenderNotes(orgId: string, id: string, notes: string) 
 }
 
 export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
+  const r = await redis();
+  const lockKey = storeKey(orgId) + ":scan-lock";
+  const lockToken = randomUUID();
+  const acquired = await r.set(lockKey, lockToken, { NX: true, EX: 900 });
+  if (!acquired) throw new Error("A Tender Intelligence scan is already running for this workspace.");
+  const releaseLock = async () => {
+    try {
+      if (await r.get(lockKey) === lockToken) await r.del(lockKey);
+    } catch {
+      // TTL is the fallback if lock cleanup itself fails.
+    }
+  };
+
   const started = Date.now();
   const run: TenderScanRun = {
     id: randomUUID(),
@@ -707,6 +764,7 @@ export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
       store.audits.unshift(run);
       store.audits = store.audits.slice(0, 50);
     });
+    await releaseLock();
     return run;
   } catch (error) {
     run.errors.push(error instanceof Error ? error.message : String(error));
@@ -719,6 +777,7 @@ export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
       store.audits.unshift(run);
       store.audits = store.audits.slice(0, 50);
     });
+    await releaseLock();
     return run;
   }
 }
