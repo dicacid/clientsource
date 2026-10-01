@@ -366,6 +366,123 @@ Do not output a company without a source URL.`;
     };
   });
 
+export const discoverCompetitorsByProduct = createServerFn({ method: "POST" })
+  .middleware([requireRenderMember])
+  .inputValidator((d: unknown) => z.object({
+    product: z.string().min(2).max(240),
+    region: z.string().min(2).max(120).default("Australia"),
+    businessContext,
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const profile = BUSINESS_CONTEXTS[data.businessContext];
+    const capabilities = (await getCapabilityProfile(context.organizationId)) || capabilityText();
+
+    type ProductDiscovery = {
+      matches: {
+        name: string;
+        website: string | null;
+        location: string | null;
+        relationship: "seller" | "distributor" | "integrator" | "manufacturer" | "service_provider" | "other";
+        category: "direct" | "adjacent" | "large-scale";
+        matched_products: string[];
+        why_relevant: string;
+        positioning: string;
+        source_urls: string[];
+      }[];
+      search_notes: string[];
+    };
+
+    const system = `You are SPA Intelligence researching who else sells, distributes, integrates, manufactures or commercially offers a specific product, model, technology or service in the market for ${profile.name}.
+This is product-led competitor discovery, not a generic company search.
+Find genuine companies from current public sources and separate the relationship to the searched product from whether they are a direct competitor.
+Do not include Solar Power Australia, Solar Online Australia or ELMOFO themselves.
+Do not invent stock status, authorised-dealer status, pricing, customers, sales volume or market share.
+Every returned company must have a public source URL that supports the product or offer match.
+Prefer official company product/service pages, manufacturer dealer pages, current catalogues and reputable distributor pages.
+Avoid marketplaces, directories and duplicate branch/location listings unless they identify a real operating company.`;
+
+    const prompt = `Business lens: ${profile.name}
+Product / model / technology / service to trace: ${data.product}
+Region: ${data.region}
+Commercial lens: ${profile.lens}
+
+SPA CAPABILITY CONTEXT:
+${capabilities.slice(0, 10000)}
+
+Find companies in or serving the requested region that currently appear to sell, distribute, integrate, manufacture, install or commercially offer the searched product or a clearly equivalent competing offer.
+
+Return JSON:
+{
+  "matches": [
+    {
+      "name": "Company name",
+      "website": "https://official-domain.example" or null,
+      "location": "City/State/Country" or supported operating region,
+      "relationship": "seller" | "distributor" | "integrator" | "manufacturer" | "service_provider" | "other",
+      "category": "direct" | "adjacent" | "large-scale",
+      "matched_products": ["exact product/model or clearly equivalent offer found"],
+      "why_relevant": "what the source proves and why this company matters to the competitive picture",
+      "positioning": "concise evidence-based positioning",
+      "source_urls": ["https://source-supporting-product-match"]
+    }
+  ],
+  "search_notes": ["important caveats, channel distinctions or ambiguity"]
+}
+
+Return 4 to 12 supported companies when available. Fewer real matches are better than padded results.
+Use "direct" only where the company competes meaningfully with ${profile.name} for customer work, not merely because it stocks a component.
+Use "adjacent" for channel sellers, specialists or firms with partial overlap.
+Use "large-scale" for materially larger providers that still compete for relevant projects.
+If the query names an exact brand/model, distinguish exact matches from substitutes in matched_products and why_relevant.`;
+
+    const result = await openRouterResearch<ProductDiscovery>(context.organizationId, system, prompt);
+    const clean = (result.data.matches ?? [])
+      .filter((item) => item?.name && Array.isArray(item.source_urls))
+      .map((item) => {
+        const domain = item.website ? normalizeQueryDomain(String(item.website)) : null;
+        const sourceUrls = item.source_urls
+          .map(String)
+          .map((x) => x.trim())
+          .filter((x) => /^https?:\/\//i.test(x))
+          .slice(0, 12);
+        return {
+          name: String(item.name).trim().slice(0, 180),
+          website: domain ? `https://${domain}` : null,
+          location: item.location ? String(item.location).trim().slice(0, 200) : null,
+          relationship: ["seller", "distributor", "integrator", "manufacturer", "service_provider"].includes(item.relationship)
+            ? item.relationship
+            : "other",
+          category: item.category === "adjacent" || item.category === "large-scale" ? item.category : "direct" as const,
+          matchedProducts: Array.isArray(item.matched_products)
+            ? item.matched_products.map(String).map((x) => x.trim()).filter(Boolean).slice(0, 10)
+            : [],
+          whyRelevant: String(item.why_relevant ?? "").trim().slice(0, 1500),
+          positioning: String(item.positioning ?? "").trim().slice(0, 1200),
+          sourceUrls,
+        };
+      })
+      .filter((item) => item.sourceUrls.length);
+
+    const researchedAt = new Date().toISOString();
+    await saveResearchRun(context.organizationId, {
+      query: `Product competitor search · ${data.product} · ${data.region}`,
+      researchType: "competitor-product-search",
+      businessContext: data.businessContext,
+      researchedAt,
+      modelUsed: result.modelUsed,
+      status: "completed",
+      result: { matches: clean, searchNotes: result.data.search_notes ?? [] },
+    });
+
+    return {
+      matches: clean,
+      searchNotes: result.data.search_notes ?? [],
+      modelUsed: result.modelUsed,
+      researchedAt,
+    };
+  });
+
+
 export const analyseSpaCompetitor = createServerFn({ method: "POST" })
   .middleware([requireRenderMember])
   .inputValidator((d: unknown) => z.object({

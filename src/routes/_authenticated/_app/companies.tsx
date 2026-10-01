@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ExternalLink, Radar, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { BarChart3, ExternalLink, PackageSearch, Plus, Radar, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResearchProgress } from "@/components/spa/ResearchProgress";
-import { analyseSpaCompetitor, discoverSpaCompetitors } from "@/lib/spa/research.functions";
-import { deleteCompetitor, getCompetitorRegistry } from "@/lib/spa/store.functions";
+import { analyseSpaCompetitor, discoverCompetitorsByProduct, discoverSpaCompetitors } from "@/lib/spa/research.functions";
+import { addCompetitor, deleteCompetitor, getCompetitorRegistry } from "@/lib/spa/store.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/companies")({
   head: () => ({ meta: [{ title: "Competitor Intelligence — SPA Intelligence" }] }),
@@ -28,6 +30,18 @@ type Competitor = {
   updatedAt: string;
   lastAnalysedAt: string | null;
   analysis: any | null;
+};
+
+type ProductMatch = {
+  name: string;
+  website: string | null;
+  location: string | null;
+  relationship: "seller" | "distributor" | "integrator" | "manufacturer" | "service_provider" | "other";
+  category: Competitor["category"];
+  matchedProducts: string[];
+  whyRelevant: string;
+  positioning: string;
+  sourceUrls: string[];
 };
 
 const LABELS: Record<Competitor["category"], string> = {
@@ -141,7 +155,9 @@ function AnalysisPanel({ result }: { result: any }) {
 function CompetitorIntelligence() {
   const getRegistry = useServerFn(getCompetitorRegistry);
   const discover = useServerFn(discoverSpaCompetitors);
+  const discoverByProduct = useServerFn(discoverCompetitorsByProduct);
   const analyse = useServerFn(analyseSpaCompetitor);
+  const add = useServerFn(addCompetitor);
   const remove = useServerFn(deleteCompetitor);
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -152,6 +168,16 @@ function CompetitorIntelligence() {
   const [analysingAll, setAnalysingAll] = useState(false);
   const [progressDetail, setProgressDetail] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [manualWebsite, setManualWebsite] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [manualCategory, setManualCategory] = useState<Competitor["category"]>("direct");
+  const [addingManual, setAddingManual] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const [productRegion, setProductRegion] = useState("Australia");
+  const [productMatches, setProductMatches] = useState<ProductMatch[]>([]);
+  const [productNotes, setProductNotes] = useState<string[]>([]);
+  const [productSearching, setProductSearching] = useState(false);
+  const [addingProduct, setAddingProduct] = useState<string | null>(null);
 
   async function runDiscovery(initial = false) {
     setDiscovering(true);
@@ -165,6 +191,80 @@ function CompetitorIntelligence() {
     } finally {
       setDiscovering(false);
       setProgressDetail("");
+    }
+  }
+
+  async function addManualCompetitor(e: FormEvent) {
+    e.preventDefault();
+    if (!manualWebsite.trim() && !manualName.trim()) return;
+    setAddingManual(true);
+    setError(null);
+    try {
+      const rows = await add({
+        data: {
+          name: manualName,
+          website: manualWebsite,
+          category: manualCategory,
+          whyCompetitor: "Added manually to the SPA competitor watchlist for investigation.",
+        },
+      });
+      setCompetitors(rows as Competitor[]);
+      setManualWebsite("");
+      setManualName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAddingManual(false);
+    }
+  }
+
+  async function runProductSearch(e: FormEvent) {
+    e.preventDefault();
+    if (productQuery.trim().length < 2) return;
+    setProductSearching(true);
+    setError(null);
+    setProductMatches([]);
+    setProductNotes([]);
+    setProgressDetail(`Tracing who sells, distributes, integrates or offers “${productQuery.trim()}” in ${productRegion.trim() || "Australia"}.`);
+    try {
+      const result = await discoverByProduct({
+        data: {
+          product: productQuery.trim(),
+          region: productRegion.trim() || "Australia",
+          businessContext: "spa",
+        },
+      });
+      setProductMatches(result.matches as ProductMatch[]);
+      setProductNotes(result.searchNotes ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProductSearching(false);
+      setProgressDetail("");
+    }
+  }
+
+  async function addProductMatch(match: ProductMatch) {
+    setAddingProduct(match.name);
+    setError(null);
+    try {
+      const rows = await add({
+        data: {
+          name: match.name,
+          website: match.website ?? "",
+          category: match.category,
+          whyCompetitor: match.whyRelevant,
+          overlapAreas: match.matchedProducts,
+          sourceUrls: match.sourceUrls,
+          positioning: match.positioning,
+          watchSignals: [`Monitor product/channel activity around ${productQuery.trim() || "the searched offer"}.`],
+        },
+      });
+      setCompetitors(rows as Competitor[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAddingProduct(null);
     }
   }
 
@@ -248,7 +348,7 @@ function CompetitorIntelligence() {
           <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">Commercial intelligence / competitor landscape</div>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">Competitor Intelligence</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            SPA Intelligence finds the companies Brett should monitor, logs them and analyses positioning, overlap, defensible advantages and current moves. No manual website list is required.
+            SPA Intelligence can discover competitors automatically, but it is not locked to automation. Add a known company or website yourself, or trace a specific product, model, technology or offer to find other companies selling, distributing or integrating it.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -261,7 +361,126 @@ function CompetitorIntelligence() {
         </div>
       </header>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-5 grid gap-4 xl:grid-cols-2">
+        <form onSubmit={addManualCompetitor} className="border border-border bg-card p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Manual watchlist entry</div>
+          <h2 className="mt-1 text-lg font-semibold">Add a competitor yourself</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Paste a competitor website or just enter a company name. It is added to the watchlist immediately, then you can run the same deep analysis as an automatically discovered competitor.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label htmlFor="manual-website" className="text-xs font-medium">Website or domain</label>
+              <Input
+                id="manual-website"
+                value={manualWebsite}
+                onChange={(e) => setManualWebsite(e.target.value)}
+                placeholder="https://competitor.com.au"
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <label htmlFor="manual-name" className="text-xs font-medium">Company name <span className="text-muted-foreground">(optional)</span></label>
+              <Input
+                id="manual-name"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                placeholder="Competitor name"
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <label htmlFor="manual-category" className="text-xs font-medium">Relationship</label>
+              <Select value={manualCategory} onValueChange={(v) => setManualCategory(v as Competitor["category"])}>
+                <SelectTrigger id="manual-category" className="mt-1 h-11 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="direct">Direct competitor</SelectItem>
+                  <SelectItem value="adjacent">Adjacent / channel overlap</SelectItem>
+                  <SelectItem value="large-scale">Large-scale provider</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button type="submit" className="mt-3 w-full md:w-auto" disabled={addingManual || (!manualWebsite.trim() && !manualName.trim())}>
+            <Plus className="mr-2 h-4 w-4" />{addingManual ? "Adding…" : "Add to watchlist"}
+          </Button>
+        </form>
+
+        <form onSubmit={runProductSearch} className="border border-border bg-card p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Product-led competitor search</div>
+          <h2 className="mt-1 text-lg font-semibold">Who else sells this?</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Enter a specific product, model, technology or service. SPA Intelligence traces sellers, distributors, integrators and competing offers instead of requiring you to know their websites first.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+            <div>
+              <label htmlFor="product-query" className="text-xs font-medium">Product / model / technology / service</label>
+              <Input
+                id="product-query"
+                value={productQuery}
+                onChange={(e) => setProductQuery(e.target.value)}
+                placeholder="e.g. a battery model, BESS platform, inverter or remote-power skid"
+                className="mt-1 h-11"
+              />
+            </div>
+            <div>
+              <label htmlFor="product-region" className="text-xs font-medium">Market / region</label>
+              <Input
+                id="product-region"
+                value={productRegion}
+                onChange={(e) => setProductRegion(e.target.value)}
+                placeholder="Australia"
+                className="mt-1 h-11"
+              />
+            </div>
+          </div>
+          <Button type="submit" className="mt-3 w-full md:w-auto" disabled={productSearching || productQuery.trim().length < 2}>
+            <PackageSearch className="mr-2 h-4 w-4" />{productSearching ? "Searching…" : "Find competing sellers & offers"}
+          </Button>
+        </form>
+      </section>
+
+      {!!productMatches.length && (
+        <section className="mb-5 border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-primary">Product search results</div>
+            <h2 className="mt-1 font-semibold">Companies connected to “{productQuery}”</h2>
+            {!!productNotes.length && <p className="mt-1 text-xs text-muted-foreground">{productNotes.join(" · ")}</p>}
+          </div>
+          <div className="divide-y divide-border">
+            {productMatches.map((match) => (
+              <article key={`${match.name}-${match.website ?? match.sourceUrls[0] ?? "match"}`} className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_140px_160px] lg:items-start">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold">{match.name}</h3>
+                    <span className="border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">{match.relationship.replace("_", " ")}</span>
+                    <span className="border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">{LABELS[match.category]}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{match.location || "Location not confirmed"}</div>
+                  <p className="mt-2 text-sm leading-5 text-muted-foreground">{match.whyRelevant}</p>
+                  {!!match.matchedProducts.length && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {match.matchedProducts.map((x) => <span key={x} className="border border-primary/25 bg-primary/5 px-2 py-1 text-[10px]">{x}</span>)}
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {match.website && <SourceLink href={match.website} label="Website" />}
+                    {match.sourceUrls.slice(0, 3).map((url, i) => <SourceLink key={url} href={url} label={`Product evidence ${i + 1}`} />)}
+                  </div>
+                </div>
+                <div className="text-xs leading-5 text-muted-foreground">{match.positioning || "Positioning not yet analysed."}</div>
+                <Button size="sm" onClick={() => addProductMatch(match)} disabled={!!addingProduct || discovering || analysingAll || !!analysingId}>
+                  <Plus className="mr-2 h-3.5 w-3.5" />{addingProduct === match.name ? "Adding…" : "Add to watchlist"}
+                </Button>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+            <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ["Direct", counts.direct],
           ["Adjacent", counts.adjacent],
@@ -275,7 +494,7 @@ function CompetitorIntelligence() {
         ))}
       </div>
 
-      {(discovering || analysingAll || !!analysingId) && <div className="mb-5"><ResearchProgress detail={progressDetail || "Competitor intelligence research is running."} /></div>}
+      {(discovering || analysingAll || !!analysingId || productSearching) && <div className="mb-5"><ResearchProgress detail={progressDetail || "Competitor intelligence research is running."} /></div>}
       {error && <div className="mb-5 border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
 
       <section className="border border-border bg-card">
