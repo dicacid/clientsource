@@ -348,23 +348,23 @@ function ProspectPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Prospect finder" sub="Your website in → matching companies, their decision-maker, and a ready-to-send email out." />
 
-      <form onSubmit={start} className="grid gap-4 rounded-lg border bg-card p-5 sm:grid-cols-[1fr_1fr_1fr_160px_auto] sm:items-end">
+      <form onSubmit={start} className="grid gap-5 rounded-lg border bg-card p-5 md:grid-cols-2 xl:grid-cols-4">
         <div className="space-y-1.5">
           <Label htmlFor="p-name">Your name</Label>
-          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
+          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="p-email">Your email</Label>
-          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="p-site">Your business website</Label>
-          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" />
+          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="p-region">Target region</Label>
           <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
-            <SelectTrigger id="p-region">
+            <SelectTrigger id="p-region" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus:ring-2 focus:ring-primary/30">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -374,21 +374,22 @@ function ProspectPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5 sm:col-span-5">
+        <div className="space-y-1.5 md:col-span-2 xl:col-span-4">
           <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
           <Textarea
             id="p-claims"
             value={claims}
             onChange={(e) => changeClaims(e.target.value)}
-            rows={3}
-            placeholder="One per line"
+            rows={4}
+            placeholder="One approved claim per line"
             disabled={!domainKey}
+            className="min-h-[108px] resize-y border-border/90 bg-background/70 px-3 py-2.5 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <p className="text-xs text-muted-foreground">
             Facts you personally approve for this sender, e.g. runs alongside existing tools; setup takes about five minutes. Saved for {domainKey || "this website"} only.
           </p>
         </div>
-        <Button type="submit" disabled={busy} className="gap-2 sm:col-start-5">
+        <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           Find prospects
         </Button>
