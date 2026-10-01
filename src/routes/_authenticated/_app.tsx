@@ -17,7 +17,8 @@ export const Route = createFileRoute("/_authenticated/_app")({
 });
 
 const PRIMARY = [
-  { to: "/dashboard", label: "Opportunity Radar", icon: Radar },\n  { to: "/tenders", label: "Tender Intelligence", icon: Gavel },
+  { to: "/dashboard", label: "Opportunity Radar", icon: Radar },
+  { to: "/tenders", label: "Tender Intelligence", icon: Gavel },
   { to: "/prospect", label: "Prospects", icon: Target },
   { to: "/contacts", label: "Industries", icon: Factory },
   { to: "/companies", label: "Competitors", icon: Building2 },
