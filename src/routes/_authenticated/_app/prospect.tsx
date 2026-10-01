@@ -401,8 +401,8 @@ function ProspectPage() {
         </div>
       )}
 
-      <form onSubmit={start} className="space-y-5 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
-        <div className="grid gap-4 lg:grid-cols-2">
+      <form onSubmit={start} className="space-y-5 rounded-xl border bg-card p-4 shadow-sm sm:p-5 lg:p-6">
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="min-w-0 space-y-2">
             <Label htmlFor="p-name" className="text-sm font-medium">Your name</Label>
             <Input
@@ -424,28 +424,30 @@ function ProspectPage() {
               className="h-11 w-full text-base"
             />
           </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="p-site" className="text-sm font-medium">SPA business profile</Label>
-            <Input
-              id="p-site"
-              value={website}
-              readOnly
-              className="h-11 w-full bg-muted/40 text-base"
-            />
-          </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="p-region" className="text-sm font-medium">Target region</Label>
-            <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
-              <SelectTrigger id="p-region" className="h-11 w-full text-base">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="domestic">Domestic (Australia)</SelectItem>
-                <SelectItem value="international">International</SelectItem>
-                <SelectItem value="both">Both</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        </div>
+
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor="p-site" className="text-sm font-medium">SPA business profile</Label>
+          <Input
+            id="p-site"
+            value={website}
+            readOnly
+            className="h-11 w-full bg-muted/40 font-mono text-sm sm:text-base"
+          />
+        </div>
+
+        <div className="min-w-0 space-y-2 lg:max-w-xl">
+          <Label htmlFor="p-region" className="text-sm font-medium">Target region</Label>
+          <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
+            <SelectTrigger id="p-region" className="h-11 w-full text-base">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="domestic">Domestic (Australia)</SelectItem>
+              <SelectItem value="international">International</SelectItem>
+              <SelectItem value="both">Both</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -465,7 +467,7 @@ function ProspectPage() {
         </div>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={busy} className="h-11 w-full gap-2 px-6 text-base sm:w-auto sm:min-w-48">
+          <Button type="submit" disabled={busy} className="h-11 w-full gap-2 px-6 text-base lg:w-auto lg:min-w-48">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             {prefillTarget ? "Research selected prospect" : "Find prospects"}
           </Button>
