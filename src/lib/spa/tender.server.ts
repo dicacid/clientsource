@@ -282,7 +282,29 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
       result?: { records?: QldForwardRow[]; total?: number };
     };
     let records: QldForwardRow[] = [];
+    let dumpFailure: unknown = null;
     try {
+      const dumpUrl = `https://data.qld.gov.au/datastore/dump/${resourceId}?bom=True`;
+      const response = await fetch(dumpUrl, {
+        headers: {
+          Accept: "text/csv,text/plain,*/*",
+          "User-Agent": "Mozilla/5.0 (compatible; SPA-Intelligence/1.0; +https://spa-intelligence.onrender.com)",
+        },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status} from data.qld.gov.au`);
+      const csv = await response.text();
+      const parsed = Papa.parse<QldForwardRow>(csv.replace(/^\uFEFF/, ""), {
+        header: true,
+        skipEmptyLines: "greedy",
+      });
+      records = parsed.data.filter((row) => row && Object.keys(row).length > 0);
+      if (!records.length) throw new Error("Queensland datastore dump contained no records.");
+    } catch (error) {
+      dumpFailure = error;
+    }
+
+    if (!records.length) try {
       const pageSize = 100;
       const firstUrl = apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=0`);
       const first = await fetchedJson<QldPayload>(firstUrl, 18000);
@@ -325,8 +347,9 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
       const parsed = Papa.parse<QldForwardRow>(csv, { header: true, skipEmptyLines: "greedy" });
       records = parsed.data.filter((row) => row && Object.keys(row).length > 0);
       if (!records.length) {
-        const detail = apiError instanceof Error ? apiError.message : String(apiError);
-        throw new Error(`Queensland CKAN API failed (${detail}) and CSV fallback contained no records.`);
+        const apiDetail = apiError instanceof Error ? apiError.message : String(apiError);
+        const dumpDetail = dumpFailure instanceof Error ? dumpFailure.message : String(dumpFailure ?? "not attempted");
+        throw new Error(`Queensland datastore dump failed (${dumpDetail}); CKAN API failed (${apiDetail}); CSV fallback contained no records.`);
       }
     }
 
