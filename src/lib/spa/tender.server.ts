@@ -8,6 +8,7 @@ import {
   classifyClosing,
   deterministicTenderKey,
   highRelevance,
+  isOfficialAustralianProcurementUrl,
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
   parseNswOpportunityText,
@@ -327,6 +328,130 @@ const ausTenderAdapter: TenderSourceAdapter = {
 
 const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
 
+function officialSourceName(sourceUrl: string) {
+  const host = new URL(sourceUrl).hostname.toLowerCase();
+  if (host === "buy.nsw.gov.au") return "buy.nsw Opportunities Hub";
+  if (host.endsWith("tenders.vic.gov.au")) return "Buying for Victoria";
+  if (host.endsWith("tenders.act.gov.au")) return "Tenders ACT";
+  if (host === "tenders.gov.au" || host === "www.tenders.gov.au") return "AusTender";
+  if (host.endsWith("qtenders.epw.qld.gov.au")) return "QTenders";
+  if (host.endsWith("tenders.sa.gov.au")) return "SA Tenders & Contracts";
+  if (host.endsWith("tenders.wa.gov.au")) return "Tenders WA";
+  if (host.endsWith("tenders.tas.gov.au")) return "Tasmanian Government Tenders";
+  if (host === "tendersonline.nt.gov.au") return "NT Quotations and Tenders Online";
+  if (host.endsWith("data.gov.au")) return "Data.gov.au procurement data";
+  return "Official Australian procurement source";
+}
+
+async function officialWebSearchFallback(orgId: string, failedSources: string[]) {
+  const runtime = await getAiRuntime(orgId);
+  type Result = {
+    opportunities: Array<{
+      title: string;
+      issuer: string;
+      reference: string | null;
+      source_url: string;
+      opportunity_type: string | null;
+      category: string | null;
+      summary: string | null;
+      published_date: string | null;
+      closing_date: string | null;
+      timezone: string | null;
+      state: string | null;
+      location: string | null;
+      documented_contract_value: string | null;
+      document_links: string[];
+    }>;
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const response = await requestJsonResponse<Result>({
+    ...runtime,
+    effort: "low",
+    tools: [{
+      type: "openrouter:web_search",
+      parameters: {
+        engine: "parallel",
+        max_results: 8,
+        max_total_results: 16,
+        search_context_size: "medium",
+      },
+    }],
+    system: `You are the fallback discovery layer for SPA Intelligence's Australian procurement monitor.
+Direct HTTP access to some official tender portals is blocked from the application runtime, so use current web search to recover only evidence that is indexed from official Australian procurement sources.
+Never invent an opportunity, reference, issuer, closing date, requirement, value or document.
+Only return currently open opportunities whose source_url is an official procurement URL on one of these hosts:
+buy.nsw.gov.au, tenders.vic.gov.au, tenders.act.gov.au, tenders.gov.au, qtenders.epw.qld.gov.au, tenders.sa.gov.au, tenders.wa.gov.au, tenders.tas.gov.au, tendersonline.nt.gov.au, data.gov.au.
+Prefer exact opportunity/detail pages over generic search pages.
+If a field is not supported by the indexed official material, return null rather than guessing.`,
+    user: `Today is ${today}. Direct retrieval failed or was limited for: ${failedSources.join(", ")}.
+
+Search current official Australian procurement material for OPEN opportunities relevant to one or more of:
+- commercial or industrial solar PV
+- batteries, BESS and energy storage
+- microgrids, hybrid power, off-grid power and remote power
+- electrical infrastructure, power systems, generators and energy systems
+- EV charging, electric vehicles and electrification
+- lithium battery systems and specialist battery supply
+- renewable-energy equipment supply, solar panels, inverters and chargers
+- remote monitoring, mining/resources site power and relocatable power
+- specialist electrical/energy engineering, prototyping or R&D
+
+Return JSON {"opportunities":[...]} with at most 20 high-signal opportunities.
+Each opportunity must include title, issuer and source_url.
+Include reference and closing_date whenever shown by the official source.
+Use Australian state abbreviations where supported.
+Do not return closed, awarded or expired opportunities.
+Do not use news articles, tender aggregators, LinkedIn, directories, supplier sites or inferred opportunities.`,
+  });
+
+  const rows: RawTender[] = [];
+  for (const item of response.data.opportunities ?? []) {
+    const sourceUrl = String(item.source_url ?? "").trim();
+    const title = String(item.title ?? "").trim();
+    const issuer = String(item.issuer ?? "").trim();
+    if (!title || !issuer || !isOfficialAustralianProcurementUrl(sourceUrl)) continue;
+
+    const reference = item.reference ? String(item.reference).trim().slice(0, 120) : null;
+    const sourceSpecificId = reference || canonicalUrl(sourceUrl);
+    const state = item.state ? String(item.state).trim().toUpperCase().slice(0, 10) : null;
+    const timezone =
+      item.timezone ? String(item.timezone).trim().slice(0, 80)
+      : state === "QLD" ? "Australia/Brisbane"
+      : state === "SA" ? "Australia/Adelaide"
+      : state === "WA" ? "Australia/Perth"
+      : state === "NT" ? "Australia/Darwin"
+      : state === "TAS" ? "Australia/Hobart"
+      : "Australia/Sydney";
+
+    rows.push({
+      sourceName: officialSourceName(sourceUrl),
+      sourceSpecificId,
+      sourceUrl,
+      tenderTitle: title.slice(0, 500),
+      issuer: issuer.slice(0, 240),
+      referenceNumber: reference,
+      opportunityType: String(item.opportunity_type ?? "Tender").trim().slice(0, 120),
+      category: item.category ? String(item.category).trim().slice(0, 500) : null,
+      summary: item.summary ? String(item.summary).trim().slice(0, 2000) : null,
+      publishedDateRaw: item.published_date ? String(item.published_date).trim().slice(0, 120) : null,
+      closingDateRaw: item.closing_date ? String(item.closing_date).trim().slice(0, 120) : null,
+      timezone,
+      country: "Australia",
+      state,
+      location: item.location ? String(item.location).trim().slice(0, 240) : state,
+      documentedContractValue: item.documented_contract_value ? String(item.documented_contract_value).trim().slice(0, 240) : null,
+      tenderDocumentLinks: Array.isArray(item.document_links)
+        ? item.document_links.map(String).map((url) => url.trim()).filter(isOfficialAustralianProcurementUrl).slice(0, 12)
+        : [],
+      sourceStatus: "open",
+      retrievalMethod: "search",
+    });
+  }
+
+  return { rows, modelUsed: response.modelUsed };
+}
+
 export async function tenderSourceHealth() {
   const sources: Array<{
     sourceId: string;
@@ -380,12 +505,21 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
       ? (Number.isFinite(Date.parse(raw.publishedDateRaw)) ? new Date(raw.publishedDateRaw).toISOString() : null)
       : parseAustralianLocalDate(raw.publishedDateRaw, raw.timezone ?? "Australia/Sydney"))
     : null;
+  const sourceClassification: TenderEvidence["classification"] =
+    raw.retrievalMethod === "search" ? "SOURCE_CLAIM" : "OBSERVED_FACT";
   const evidence: TenderEvidence[] = [
-    { statement: `Tender title: ${raw.tenderTitle}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" },
-    { statement: `Issuer: ${raw.issuer}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" },
+    { statement: `Tender title: ${raw.tenderTitle}`, sourceUrl: raw.sourceUrl, classification: sourceClassification },
+    { statement: `Issuer: ${raw.issuer}`, sourceUrl: raw.sourceUrl, classification: sourceClassification },
   ];
-  if (raw.referenceNumber) evidence.push({ statement: `Reference: ${raw.referenceNumber}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" });
-  if (raw.closingDateRaw) evidence.push({ statement: `Closing date published as ${raw.closingDateRaw}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" });
+  if (raw.referenceNumber) evidence.push({ statement: `Reference: ${raw.referenceNumber}`, sourceUrl: raw.sourceUrl, classification: sourceClassification });
+  if (raw.closingDateRaw) evidence.push({ statement: `Closing date published as ${raw.closingDateRaw}`, sourceUrl: raw.sourceUrl, classification: sourceClassification });
+  if (raw.retrievalMethod === "search") {
+    evidence.push({
+      statement: "Opportunity metadata was recovered from indexed official procurement material because direct retrieval from the source portal was unavailable from the application runtime.",
+      sourceUrl: raw.sourceUrl,
+      classification: "SOURCE_CLAIM",
+    });
+  }
 
   const routingText = [raw.tenderTitle, raw.summary, raw.category, raw.opportunityType, raw.issuer].filter(Boolean).join(" ");
   const businessFits = businessRouting(routingText);
@@ -437,6 +571,9 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
     risksUnknowns: [
       ...(raw.documentedContractValue ? [] : ["Contract value is not published in the retrieved evidence."]),
       ...(raw.tenderDocumentLinks.length ? [] : ["Tender documents were not retrieved from the public index and should be reviewed at source."]),
+      ...(raw.retrievalMethod === "search"
+        ? ["This record was recovered through indexed official-source search because direct source retrieval was blocked; confirm the live official notice before committing bid effort."]
+        : []),
     ],
     commercialHypotheses: [],
     questionsToAsk: [],
@@ -721,6 +858,42 @@ export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
       }
       await persistScanProgress(orgId, run);
     }
+
+    const failedSourceNames = run.sourceAttempts
+      .filter((source) => source.status !== "success")
+      .map((source) => source.sourceName);
+    if (failedSourceNames.length) {
+      const fallbackStart = Date.now();
+      run.sourcesAttempted++;
+      try {
+        const fallback = await officialWebSearchFallback(orgId, failedSourceNames);
+        rawRows.push(...fallback.rows);
+        run.sourceSuccesses++;
+        run.selectedModel = fallback.modelUsed;
+        run.sourceAttempts.push({
+          sourceId: "official-web-search-fallback",
+          sourceName: "Official procurement indexed-search fallback",
+          status: "success",
+          retrieved: fallback.rows.length,
+          error: null,
+          durationMs: Date.now() - fallbackStart,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        run.sourceFailures++;
+        run.errors.push(`Official procurement indexed-search fallback: ${message}`);
+        run.sourceAttempts.push({
+          sourceId: "official-web-search-fallback",
+          sourceName: "Official procurement indexed-search fallback",
+          status: "limited",
+          retrieved: 0,
+          error: message,
+          durationMs: Date.now() - fallbackStart,
+        });
+      }
+      await persistScanProgress(orgId, run);
+    }
+
     run.opportunitiesDiscovered = rawRows.length;
 
     run.stage = "Verifying";
@@ -730,7 +903,8 @@ export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
       !!row.issuer.trim() &&
       !!row.sourceName.trim() &&
       !!row.sourceSpecificId.trim() &&
-      /^https?:\/\//i.test(row.sourceUrl)
+      /^https?:\/\//i.test(row.sourceUrl) &&
+      (row.retrievalMethod !== "search" || isOfficialAustralianProcurementUrl(row.sourceUrl))
     );
 
     run.stage = "Deduplicating";

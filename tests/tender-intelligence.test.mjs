@@ -4,6 +4,7 @@ import {
   businessRouting,
   classifyClosing,
   deterministicTenderKey,
+  isOfficialAustralianProcurementUrl,
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
   parseNswOpportunityText,
@@ -129,4 +130,13 @@ test("parses buy.nsw opportunity listing records with category and summary evide
   assert.equal(rows[0].issuer, "Department of Creative Industries, Tourism, Hospitality and Sport");
   assert.equal(rows[0].category, "Building and property - Facility maintenance · Professional Services (excl Consultancies)");
   assert.match(rows[0].summary ?? "", /suitably qualified/i);
+});
+
+
+test("official-search fallback only accepts approved Australian procurement hosts", () => {
+  assert.equal(isOfficialAustralianProcurementUrl("https://buy.nsw.gov.au/prcOpportunity/abc"), true);
+  assert.equal(isOfficialAustralianProcurementUrl("https://www.tenders.act.gov.au/tenders/open"), true);
+  assert.equal(isOfficialAustralianProcurementUrl("https://www.tenders.tas.gov.au/OpenForBids/List/Public/ClosingDate"), true);
+  assert.equal(isOfficialAustralianProcurementUrl("https://example-tender-aggregator.com/nsw/solar"), false);
+  assert.equal(isOfficialAustralianProcurementUrl("http://buy.nsw.gov.au/opportunity/search"), false);
 });

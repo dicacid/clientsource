@@ -118,6 +118,7 @@ export type RawTender = {
   documentedContractValue: string | null;
   tenderDocumentLinks: string[];
   sourceStatus: TenderRecord["sourceStatus"];
+  retrievalMethod?: "direct" | "search";
 };
 
 const MONTHS: Record<string, number> = {
@@ -456,4 +457,35 @@ export function parseNswOpportunityText(text: string, sourceUrl: string): RawTen
     });
   }
   return rows;
+}
+
+
+const OFFICIAL_AUSTRALIAN_PROCUREMENT_HOSTS = new Set([
+  "buy.nsw.gov.au",
+  "www.tenders.vic.gov.au",
+  "tenders.vic.gov.au",
+  "www.tenders.act.gov.au",
+  "tenders.act.gov.au",
+  "www.tenders.gov.au",
+  "tenders.gov.au",
+  "qtenders.epw.qld.gov.au",
+  "www.qtenders.epw.qld.gov.au",
+  "www.tenders.sa.gov.au",
+  "tenders.sa.gov.au",
+  "www.tenders.wa.gov.au",
+  "tenders.wa.gov.au",
+  "www.tenders.tas.gov.au",
+  "tenders.tas.gov.au",
+  "tendersonline.nt.gov.au",
+  "data.gov.au",
+  "www.data.gov.au",
+]);
+
+export function isOfficialAustralianProcurementUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && OFFICIAL_AUSTRALIAN_PROCUREMENT_HOSTS.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
