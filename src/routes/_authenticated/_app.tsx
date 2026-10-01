@@ -2,7 +2,7 @@ import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import {
-  Activity, Archive, Building2, Factory, Lightbulb, LogOut, Moon, Radar,
+  Activity, Archive, Building2, Factory, FileSearch, Lightbulb, LogOut, Moon, Radar,
   Settings, ShieldCheck, Sun, Target,
 } from "lucide-react";
 import { resolveMembership, signOut } from "@/lib/session";
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/_app")({
 
 const PRIMARY = [
   { to: "/dashboard", label: "Opportunity Radar", icon: Radar },
+  { to: "/tenders", label: "Tender Intelligence", icon: FileSearch },
   { to: "/prospect", label: "Prospects", icon: Target },
   { to: "/contacts", label: "Industries", icon: Factory },
   { to: "/companies", label: "Competitors", icon: Building2 },
