@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, PartyPopper, Plus, Trash2, Users } from "lucide-react";
+import { Download, ExternalLink, PartyPopper, Plus, Rocket, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
@@ -285,7 +285,7 @@ function PartyMode() {
     const payload = {
       schema: "cadenceops.event-handoff.v1",
       source: {
-        product: "Prospect Finder B2B",
+        product: "Prospect Intelligence",
         mode: "party",
         event_id: draft.id,
         exported_at: new Date().toISOString(),
@@ -333,7 +333,7 @@ function PartyMode() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Party mode"
-        sub="Shape the event here. Production management stays in CadenceOps."
+        sub="Weekend lols. Find the people, places and ideas here. When it becomes a real production, hand it to CadenceOps."
         actions={
           draft ? (
             <>
@@ -352,9 +352,9 @@ function PartyMode() {
         <div className="flex items-start gap-3">
           <PartyPopper className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <div>
-            <div className="font-medium">Discovery and collaboration, not show operations.</div>
+            <div className="font-medium">Weekend lols, with a clean exit into real production.</div>
             <p className="mt-1 text-muted-foreground">
-              Use Party mode to work out what the event should be, who should be involved and what resources are worth pursuing. When it becomes real, export the structured handoff to CadenceOps.
+              Use Party Mode to discover artists, DJs, venues, suppliers, collaborators and ideas. When the idea becomes a real event, export the structured handoff to CadenceOps. The open-source JSON export remains available either way.
             </p>
           </div>
         </div>
@@ -600,13 +600,11 @@ function PartyMode() {
                 </div>
 
                 <div className="rounded-lg border bg-card p-5">
-                  <h2 className="font-semibold">CadenceOps boundary</h2>
+                  <h2 className="font-semibold">This one actually happening?</h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Party Mode stops at discovery, concept shaping and shortlisting. Budgets, run sheets, crew operations, logistics and show-day delivery belong in CadenceOps.
+                    Party Mode stops at discovery, concept shaping and shortlisting. Once you have enough of the event together, CadenceOps is the next step for budgets, run sheets, crew, equipment, logistics, documentation and show-day delivery. Your event data stays portable.
                   </p>
-                  <Button variant="outline" onClick={exportCadenceOps} className="mt-4 gap-2">
-                    <Download className="h-4 w-4" /> Export structured handoff
-                  </Button>
+                  <div className="mt-4 flex flex-wrap gap-2"><Button variant="outline" onClick={exportCadenceOps} className="gap-2"><Download className="h-4 w-4" /> Export structured handoff</Button><Button asChild className="gap-2"><a href="https://cadenceops.app" target="_blank" rel="noreferrer"><Rocket className="h-4 w-4" /> Open CadenceOps</a></Button></div>
                 </div>
               </section>
 
