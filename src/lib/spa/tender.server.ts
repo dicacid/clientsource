@@ -248,6 +248,97 @@ const townsvilleAdapter: TenderSourceAdapter = {
   },
 };
 
+const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
+  id: "qld-forward-procurement",
+  name: "Queensland Government Forward Procurement Pipeline",
+  async retrieve() {
+    const resourceId = "d3968658-dbb7-4732-bc19-467c49de23de";
+    const datasetUrl = "https://www.data.qld.gov.au/dataset/forward-procurement-pipeline/resource/" + resourceId;
+    const apiUrl = "https://www.data.qld.gov.au/api/3/action/datastore_search?resource_id=" +
+      resourceId + "&limit=1000";
+
+    type QldForwardRow = {
+      "_id"?: number;
+      "Agency"?: string;
+      "Business Unit"?: string | null;
+      "Category Group"?: string | null;
+      "Category"?: string | null;
+      "Program Description"?: string;
+      "Estimated Timing for Release to Market"?: string | null;
+      "Procurement Method"?: string | null;
+      "Spend Range"?: string | null;
+      "Funding Status"?: string | null;
+      "Region SA4"?: string | null;
+      "Agency Region"?: string | null;
+      "Link"?: string | null;
+      "Brisbane 2032 related"?: string | null;
+    };
+
+    const payload = await fetchedJson<{ success?: boolean; result?: { records?: QldForwardRow[] } }>(apiUrl, 18000);
+    if (!payload.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
+
+    const relevant = /\b(?:solar|photovoltaic|\bpv\b|battery|\bbess\b|energy storage|renewable|microgrid|off[- ]grid|hybrid power|electric(?:al|ity)?|power (?:system|supply|infrastructure|station|generation)|generator|substation|transformer|switchboard|high voltage|low voltage|ev charging|electric vehicle|electrification|charging infrastructure|lithium|inverter|decarboni[sz]|distributed energy|hydrogen)\b/i;
+    const records = payload.result?.records ?? [];
+
+    return records.flatMap((row) => {
+      const title = String(row["Program Description"] ?? "").trim();
+      const issuer = String(row["Agency"] ?? "").trim();
+      if (!title || !issuer) return [];
+
+      const relevanceText = [
+        title,
+        row["Category Group"],
+        row["Category"],
+        row["Business Unit"],
+      ].filter(Boolean).join(" ");
+      if (!relevant.test(relevanceText)) return [];
+
+      const rowId = Number(row["_id"]);
+      if (!Number.isFinite(rowId)) return [];
+
+      const method = String(row["Procurement Method"] ?? "").trim();
+      const timing = String(row["Estimated Timing for Release to Market"] ?? "").trim();
+      const spend = String(row["Spend Range"] ?? "").trim();
+      const funding = String(row["Funding Status"] ?? "").trim();
+      const region = String(row["Region SA4"] ?? row["Agency Region"] ?? "").trim();
+      const categoryGroup = String(row["Category Group"] ?? "").trim();
+      const category = String(row["Category"] ?? "").trim();
+      const publishedLink = String(row["Link"] ?? "").trim();
+      const sourceUrl = /^https?:\/\//i.test(publishedLink) ? publishedLink : datasetUrl;
+
+      const summaryParts = [
+        categoryGroup ? `Category group: ${categoryGroup}.` : "",
+        category ? `Category: ${category}.` : "",
+        timing ? `Estimated release to market: ${timing}.` : "",
+        method ? `Procurement method: ${method}.` : "",
+        spend ? `Published estimated spend range: ${spend}.` : "",
+        funding ? `Funding status: ${funding}.` : "",
+      ].filter(Boolean);
+
+      return [{
+        sourceName: "Queensland Government Forward Procurement Pipeline",
+        sourceSpecificId: `qld-fpp-${rowId}`,
+        sourceUrl,
+        tenderTitle: title.slice(0, 500),
+        issuer: issuer.slice(0, 240),
+        referenceNumber: null,
+        opportunityType: method ? `Forward procurement · ${method}` : "Forward procurement",
+        category: [categoryGroup, category].filter(Boolean).join(" · ").slice(0, 500) || null,
+        summary: summaryParts.join(" ").slice(0, 2000) || null,
+        publishedDateRaw: null,
+        closingDateRaw: null,
+        timezone: "Australia/Brisbane",
+        country: "Australia",
+        state: "QLD",
+        location: region ? `${region}, Queensland` : "Queensland",
+        documentedContractValue: null,
+        tenderDocumentLinks: [],
+        sourceStatus: "unknown" as const,
+      }];
+    });
+  },
+};
+
 const victoriaAdapter: TenderSourceAdapter = {
   id: "buying-for-victoria",
   name: "Buying for Victoria",
@@ -326,7 +417,7 @@ const ausTenderAdapter: TenderSourceAdapter = {
   },
 };
 
-const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
+const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, queenslandForwardProcurementAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
 
 function officialSourceName(sourceUrl: string) {
   const host = new URL(sourceUrl).hostname.toLowerCase();
@@ -600,23 +691,37 @@ function sameMaterial(a: TenderRecord, b: TenderRecord) {
   return JSON.stringify({
     title: a.tenderTitle,
     issuer: a.issuer,
+    type: a.opportunityType,
+    category: a.category,
+    summary: a.summary,
     close: a.normalizedCloseTimestamp,
     status: a.sourceStatus,
+    location: a.location,
     docs: [...a.tenderDocumentLinks].sort(),
     value: a.documentedContractValue,
   }) === JSON.stringify({
     title: b.tenderTitle,
     issuer: b.issuer,
+    type: b.opportunityType,
+    category: b.category,
+    summary: b.summary,
     close: b.normalizedCloseTimestamp,
     status: b.sourceStatus,
+    location: b.location,
     docs: [...b.tenderDocumentLinks].sort(),
     value: b.documentedContractValue,
   });
 }
 
 function mergeRecord(existing: TenderRecord, fresh: TenderRecord, now: string) {
-  const fields: Array<keyof Pick<TenderRecord, "tenderTitle" | "issuer" | "normalizedCloseTimestamp" | "closingDateTime" | "sourceStatus" | "documentedContractValue">> = [
-    "tenderTitle", "issuer", "normalizedCloseTimestamp", "closingDateTime", "sourceStatus", "documentedContractValue",
+  const fields: Array<keyof Pick<TenderRecord,
+    "tenderTitle" | "issuer" | "opportunityType" | "category" | "summary" |
+    "normalizedCloseTimestamp" | "closingDateTime" | "sourceStatus" | "location" |
+    "documentedContractValue"
+  >> = [
+    "tenderTitle", "issuer", "opportunityType", "category", "summary",
+    "normalizedCloseTimestamp", "closingDateTime", "sourceStatus", "location",
+    "documentedContractValue",
   ];
   for (const field of fields) {
     if (JSON.stringify(existing[field]) !== JSON.stringify(fresh[field])) {
