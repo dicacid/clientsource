@@ -275,11 +275,36 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
       "Brisbane 2032 related"?: string | null;
     };
 
-    const payload = await fetchedJson<{ success?: boolean; result?: { records?: QldForwardRow[] } }>(apiUrl, 18000);
-    if (!payload.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
+    type QldPayload = {
+      success?: boolean;
+      result?: { records?: QldForwardRow[]; total?: number };
+    };
+    const pageSize = 100;
+    const firstUrl = apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=0`);
+    const first = await fetchedJson<QldPayload>(firstUrl, 18000);
+    if (!first.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
+
+    const total = Number(first.result?.total ?? first.result?.records?.length ?? 0);
+    const records = [...(first.result?.records ?? [])];
+    const offsets = Array.from(
+      { length: Math.max(0, Math.ceil(total / pageSize) - 1) },
+      (_, index) => (index + 1) * pageSize,
+    );
+    for (let i = 0; i < offsets.length; i += 4) {
+      const batch = offsets.slice(i, i + 4);
+      const pages = await Promise.all(batch.map((offset) =>
+        fetchedJson<QldPayload>(
+          apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=${offset}`),
+          18000,
+        )
+      ));
+      for (const page of pages) {
+        if (!page.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
+        records.push(...(page.result?.records ?? []));
+      }
+    }
 
     const relevant = /\b(?:solar|photovoltaic|\bpv\b|battery|\bbess\b|energy storage|renewable|microgrid|off[- ]grid|hybrid power|electric(?:al|ity)?|power (?:system|supply|infrastructure|station|generation)|generator|substation|transformer|switchboard|high voltage|low voltage|ev charging|electric vehicle|electrification|charging infrastructure|lithium|inverter|decarboni[sz]|distributed energy|hydrogen)\b/i;
-    const records = payload.result?.records ?? [];
 
     return records.flatMap((row) => {
       const title = String(row["Program Description"] ?? "").trim();
