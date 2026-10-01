@@ -179,6 +179,89 @@ async function fetchedJson<T>(url: string, timeout = 12000): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+const qldForwardProcurementAdapter: TenderSourceAdapter = {
+  id: "qld-forward-procurement",
+  name: "Queensland Government Forward Procurement Pipeline",
+  async retrieve() {
+    const resourceId = "d3968658-dbb7-4732-bc19-467c49de23de";
+    const sourceUrl = "https://www.data.qld.gov.au/dataset/forward-procurement-pipeline/resource/" + resourceId;
+    const apiUrl = "https://www.data.qld.gov.au/api/3/action/datastore_search?resource_id=" +
+      resourceId + "&limit=1000";
+    type QldForwardRow = {
+      "_id"?: number | string;
+      "Agency"?: string;
+      "Business Unit"?: string;
+      "Category Group"?: string;
+      "Category"?: string;
+      "Program Description"?: string;
+      "Estimated Timing for Release to Market"?: string;
+      "Procurement Method"?: string;
+      "Spend Range"?: string;
+      "Funding Status"?: string;
+      "Region SA4"?: string;
+      "Agency Region"?: string;
+      "Link"?: string;
+      "Brisbane 2032 related"?: string;
+    };
+    const payload = await fetchedJson<{ success?: boolean; result?: { records?: QldForwardRow[] } }>(apiUrl, 15000);
+    if (!payload.success) throw new Error("Queensland Open Data returned an unsuccessful CKAN response.");
+
+    const records = payload.result?.records ?? [];
+    return records.flatMap((row) => {
+      const title = String(row["Program Description"] ?? "").trim();
+      const issuer = String(row["Agency"] ?? "").trim();
+      const rowId = String(row["_id"] ?? "").trim();
+      if (!title || !issuer || !rowId) return [];
+
+      const timing = String(row["Estimated Timing for Release to Market"] ?? "").trim();
+      const method = String(row["Procurement Method"] ?? "").trim();
+      const spendRange = String(row["Spend Range"] ?? "").trim();
+      const funding = String(row["Funding Status"] ?? "").trim();
+      const businessUnit = String(row["Business Unit"] ?? "").trim();
+      const categoryGroup = String(row["Category Group"] ?? "").trim();
+      const category = String(row["Category"] ?? "").trim();
+      const regionSa4 = String(row["Region SA4"] ?? "").trim();
+      const agencyRegion = String(row["Agency Region"] ?? "").trim();
+      const related2032 = String(row["Brisbane 2032 related"] ?? "").trim();
+      const publishedLink = String(row["Link"] ?? "").trim();
+      const sourceLink = /^https?:\/\//i.test(publishedLink) ? publishedLink : null;
+
+      const summaryParts = [
+        businessUnit ? "Business unit: " + businessUnit : "",
+        timing ? "Estimated timing for release to market: " + timing : "",
+        method ? "Procurement method: " + method : "",
+        spendRange ? "Published spend range: " + spendRange : "",
+        funding ? "Funding status: " + funding : "",
+        related2032 ? "Brisbane 2032 related: " + related2032 : "",
+        sourceLink ? "Agency/source link: " + sourceLink : "",
+      ].filter(Boolean);
+
+      return [{
+        sourceName: "Queensland Government Forward Procurement Pipeline",
+        sourceSpecificId: "qld-fpp-" + rowId,
+        sourceUrl,
+        tenderTitle: title.slice(0, 500),
+        issuer: issuer.slice(0, 240),
+        referenceNumber: null,
+        opportunityType: method
+          ? "Planned / forward procurement — " + method.slice(0, 120)
+          : "Planned / forward procurement",
+        category: [categoryGroup, category].filter(Boolean).join(" — ").slice(0, 500) || null,
+        summary: summaryParts.join(". ").slice(0, 4000) || null,
+        publishedDateRaw: null,
+        closingDateRaw: null,
+        timezone: "Australia/Brisbane",
+        country: "Australia",
+        state: "QLD",
+        location: [regionSa4, agencyRegion].filter(Boolean).join(" / ").slice(0, 500) || "Queensland",
+        documentedContractValue: null,
+        tenderDocumentLinks: sourceLink ? [sourceLink] : [],
+        sourceStatus: "planned" as const,
+      }];
+    });
+  },
+};
+
 const townsvilleAdapter: TenderSourceAdapter = {
   id: "townsville-council-data",
   name: "Townsville City Council Open Data",
@@ -316,7 +399,7 @@ const ausTenderAdapter: TenderSourceAdapter = {
   },
 };
 
-const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
+const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, qldForwardProcurementAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
 
 export async function tenderSourceHealth() {
   const sources: Array<{
@@ -376,7 +459,7 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
     { statement: `Issuer: ${raw.issuer}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" },
   ];
   if (raw.referenceNumber) evidence.push({ statement: `Reference: ${raw.referenceNumber}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" });
-  if (raw.closingDateRaw) evidence.push({ statement: `Closing date published as ${raw.closingDateRaw}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" });
+  if (raw.closingDateRaw) evidence.push({ statement: `Closing date published as ${raw.closingDateRaw}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" });\n  if (raw.summary) evidence.push({ statement: `Source description: ${raw.summary}`, sourceUrl: raw.sourceUrl, classification: "SOURCE_CLAIM" });\n  if (raw.category) evidence.push({ statement: `Source category: ${raw.category}`, sourceUrl: raw.sourceUrl, classification: "OBSERVED_FACT" });
 
   const routingText = [raw.tenderTitle, raw.summary, raw.category, raw.opportunityType, raw.issuer].filter(Boolean).join(" ");
   const businessFits = businessRouting(routingText);
@@ -431,11 +514,15 @@ function normalizeRaw(raw: RawTender, now: string): TenderRecord {
     ],
     commercialHypotheses: [],
     questionsToAsk: [],
-    suggestedNextAction: scoring.score >= 65
-      ? "Review the official tender page and documents, confirm scope and eligibility, then decide whether to pursue."
-      : scoring.score >= 40
-        ? "Review scope before committing bid effort."
-        : "Monitor unless new evidence materially improves business fit.",
+    suggestedNextAction: raw.sourceStatus === "planned"
+      ? (scoring.score >= 65
+        ? "Monitor the published release-to-market timing and source link, validate the likely procurement path, and prepare capability positioning before the opportunity opens."
+        : "Monitor the forward procurement entry for release-to-market updates and reassess when formal tender evidence is published.")
+      : scoring.score >= 65
+        ? "Review the official tender page and documents, confirm scope and eligibility, then decide whether to pursue."
+        : scoring.score >= 40
+          ? "Review scope before committing bid effort."
+          : "Monitor unless new evidence materially improves business fit.",
     notes: "",
     sourceHistory: [{
       sourceName: raw.sourceName,
@@ -518,7 +605,7 @@ async function persistScanProgress(orgId: string, run: TenderScanRun) {
 
 async function enrichRelevant(records: TenderRecord[], orgId: string, run: TenderScanRun) {
   const candidates = records
-    .filter((record) => record.sourceStatus === "open" && record.relevanceScore >= 45 && (!record.enrichedAt || record.materialChangeHistory[0]?.at === record.lastChecked))
+    .filter((record) => ["open", "planned"].includes(record.sourceStatus) && record.relevanceScore >= 45 && (!record.enrichedAt || record.materialChangeHistory[0]?.at === record.lastChecked))
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 10);
   if (!candidates.length) return;
