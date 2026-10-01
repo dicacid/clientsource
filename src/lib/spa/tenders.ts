@@ -479,6 +479,8 @@ const OFFICIAL_AUSTRALIAN_PROCUREMENT_HOSTS = new Set([
   "tendersonline.nt.gov.au",
   "data.gov.au",
   "www.data.gov.au",
+  "data.qld.gov.au",
+  "www.data.qld.gov.au",
 ]);
 
 export function isOfficialAustralianProcurementUrl(value: string) {

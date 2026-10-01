@@ -227,7 +227,7 @@ const townsvilleAdapter: TenderSourceAdapter = {
       return [{
         sourceName: "Townsville City Council Open Data",
         sourceSpecificId: reference,
-        sourceUrl: datasetUrl,
+        sourceUrl,
         tenderTitle: title.slice(0, 500),
         issuer: "Townsville City Council",
         referenceNumber: reference,
@@ -318,7 +318,7 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
       return [{
         sourceName: "Queensland Government Forward Procurement Pipeline",
         sourceSpecificId: `qld-fpp-${rowId}`,
-        sourceUrl,
+        sourceUrl: datasetUrl,
         tenderTitle: title.slice(0, 500),
         issuer: issuer.slice(0, 240),
         referenceNumber: null,
