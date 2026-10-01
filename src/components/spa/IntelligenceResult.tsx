@@ -40,8 +40,24 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export function IntelligenceResult({ result, title = "Commercial dossier" }: { result: any; title?: string }) {
-  if (!result?.dossier) return null;
-  const d = result.dossier;
+  if (!result?.dossier || typeof result.dossier !== "object") return null;
+  const raw = result.dossier;
+  const asArray = <T,>(value: unknown): T[] => Array.isArray(value) ? value : [];
+  const d = {
+    ...raw,
+    locations: asArray<string>(raw.locations),
+    current_projects: asArray<any>(raw.current_projects),
+    recent_developments: asArray<any>(raw.recent_developments),
+    energy_power_infrastructure_context: asArray<any>(raw.energy_power_infrastructure_context),
+    capability_matches: asArray<any>(raw.capability_matches),
+    opportunity_hypotheses: asArray<any>(raw.opportunity_hypotheses),
+    people: asArray<any>(raw.people),
+    tenders: asArray<any>(raw.tenders),
+    competitor_implications: asArray<any>(raw.competitor_implications),
+    questions_spa_should_ask: asArray<any>(raw.questions_spa_should_ask),
+    risks_unknowns: asArray<any>(raw.risks_unknowns),
+    evidence: asArray<any>(raw.evidence),
+  };
   const brief = [
     d.organisation,
     d.what_the_company_does,
