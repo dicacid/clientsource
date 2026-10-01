@@ -79,7 +79,7 @@ export type TenderRecord = {
   tenderDocumentLinks: string[];
   firstDiscovered: string;
   lastChecked: string;
-  sourceStatus: "open" | "closed" | "withdrawn" | "awarded" | "unknown";
+  sourceStatus: "open" | "planned" | "closed" | "withdrawn" | "awarded" | "unknown";
   workflowStatus: TenderWorkflowStatus;
   assignedBusinessContexts: TenderBusinessContext[];
   relevanceScore: number;
@@ -270,7 +270,7 @@ export function scoreTender(input: {
   const capabilityScore = Math.min(20, input.businessFits.reduce((sum, fit) => sum + fit.matchedCapabilities.length * 3, 0));
   const geographyScore = input.state && /NSW|VIC|QLD|SA|WA|TAS|ACT|NT/i.test(input.state) ? 8 : 5;
   const sourceScore = /government|victoria|nsw|austender|council|water|utility/i.test(input.sourceName + " " + input.title) ? 10 : 6;
-  const stageScore = input.sourceStatus === "open" ? 8 : input.sourceStatus === "awarded" ? 2 : 0;
+  const stageScore = input.sourceStatus === "open" ? 8 : input.sourceStatus === "planned" ? 5 : input.sourceStatus === "awarded" ? 2 : 0;
   const closingBand = classifyClosing(input.normalizedCloseTimestamp);
   const urgencyScore = closingBand === "within_7d" ? 4 : closingBand === "within_14d" ? 6 : closingBand === "later" ? 8 : closingBand === "within_48h" ? 1 : 3;
   const evidenceScore = Math.min(6, input.evidenceCount * 2);
