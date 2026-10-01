@@ -227,7 +227,7 @@ const townsvilleAdapter: TenderSourceAdapter = {
       return [{
         sourceName: "Townsville City Council Open Data",
         sourceSpecificId: reference,
-        sourceUrl,
+        sourceUrl: datasetUrl,
         tenderTitle: title.slice(0, 500),
         issuer: "Townsville City Council",
         referenceNumber: reference,
@@ -304,7 +304,7 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
       const categoryGroup = String(row["Category Group"] ?? "").trim();
       const category = String(row["Category"] ?? "").trim();
       const publishedLink = String(row["Link"] ?? "").trim();
-      const sourceUrl = /^https?:\/\//i.test(publishedLink) ? publishedLink : datasetUrl;
+      const verifiedLinks = isOfficialAustralianProcurementUrl(publishedLink) ? [publishedLink] : [];
 
       const summaryParts = [
         categoryGroup ? `Category group: ${categoryGroup}.` : "",
@@ -332,7 +332,7 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
         state: "QLD",
         location: region ? `${region}, Queensland` : "Queensland",
         documentedContractValue: null,
-        tenderDocumentLinks: [],
+        tenderDocumentLinks: verifiedLinks,
         sourceStatus: "unknown" as const,
       }];
     });
