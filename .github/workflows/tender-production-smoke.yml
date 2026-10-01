@@ -3,54 +3,28 @@ on:
   push:
     branches:
       - spa-tender-prod-smoke-1001
-
 permissions:
   contents: read
-
 jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Verify deployed Tender Intelligence
+      - name: Run gated production tender scan
         run: |
           node <<'NODE'
-          const base = "https://spa-intelligence.onrender.com";
-
-          async function fetchText(path) {
-            let last;
-            for (let attempt = 1; attempt <= 6; attempt++) {
-              const response = await fetch(base + path, {
-                redirect: "follow",
-                headers: { "user-agent": "SPA-Intelligence-production-smoke/1.0" },
-                signal: AbortSignal.timeout(45000),
-              });
-              const text = await response.text();
-              console.log("\n--- " + path + " " + response.status + " attempt " + attempt + " ---\n" + text.slice(0, 12000));
-              last = { response, text };
-              if (response.status < 500) return last;
-              await new Promise((resolve) => setTimeout(resolve, 5000));
-            }
-            throw new Error(path + " remained unavailable after retries; last status " + last.response.status);
-          }
-
-          const health = await fetchText("/health");
-          if (!health.text.includes('"ok": true') && !health.text.includes('&quot;ok&quot;: true')) {
-            throw new Error("/health did not report ok=true");
-          }
-          for (const check of ["timezoneNormalisation", "closingBand", "deterministicIdentity", "routesSpa", "routesSolarOnline", "routesElmofo"]) {
-            if (!health.text.includes(check)) throw new Error("/health missing tender core check " + check);
-          }
-
-          const source = await fetchText("/api/tenders/source-health");
-          const data = JSON.parse(source.text);
-          if (!Array.isArray(data.sources)) throw new Error("source-health returned no sources array");
-          const successful = data.sources.filter((item) => item.status === "success" && item.retrieved > 0);
-          console.log("Successful real procurement adapters:", successful.map((x) => x.sourceName + "=" + x.retrieved).join(", "));
-          if (!successful.length) throw new Error("No real procurement source returned tender records");
-
-          const tenders = await fetchText("/tenders");
-          if (!/Tender Intelligence|Sign in|SPA Intelligence/i.test(tenders.text)) {
-            throw new Error("/tenders did not return an application/auth surface");
+          const response = await fetch("https://spa-intelligence.onrender.com/api/tenders/internal-smoke", {
+            headers: { "user-agent": "SPA-Intelligence-production-smoke/1.0" },
+            signal: AbortSignal.timeout(120000),
+          });
+          const text = await response.text();
+          console.log("status=" + response.status);
+          console.log(text.slice(0, 30000));
+          if (!response.ok) throw new Error("internal smoke returned " + response.status);
+          const data = JSON.parse(text);
+          if (!data.ok || !Array.isArray(data.results)) throw new Error("invalid internal smoke response");
+          for (const result of data.results) {
+            if (result.run.sourceSuccesses < 1) throw new Error("scan had no successful sources");
+            if (!Array.isArray(result.records) || result.records.length < 1) throw new Error("scan persisted no tender records");
           }
           NODE
