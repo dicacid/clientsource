@@ -12,6 +12,7 @@ import {
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
   parseNswOpportunityText,
+  parseTasmanianOpenTenderText,
   scoreTender,
   secondaryTenderKey,
   type RawTender,
@@ -339,6 +340,18 @@ const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
   },
 };
 
+const tasmaniaAdapter: TenderSourceAdapter = {
+  id: "tenders-tasmania",
+  name: "Tasmanian Government Tenders",
+  async retrieve() {
+    const url = "https://www.tenders.tas.gov.au/OpenForBids/List/Public/ClosingDate";
+    const html = await fetchedText(url, 15000);
+    const rows = parseTasmanianOpenTenderText(decodeHtmlLines(html), url);
+    if (!rows.length) throw new Error("Official Tasmania page was reachable but no open tender records matched the current parser.");
+    return rows;
+  },
+};
+
 const victoriaAdapter: TenderSourceAdapter = {
   id: "buying-for-victoria",
   name: "Buying for Victoria",
@@ -417,7 +430,7 @@ const ausTenderAdapter: TenderSourceAdapter = {
   },
 };
 
-const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, queenslandForwardProcurementAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
+const ADAPTERS: TenderSourceAdapter[] = [townsvilleAdapter, queenslandForwardProcurementAdapter, tasmaniaAdapter, victoriaAdapter, actAdapter, nswAdapter, ausTenderAdapter];
 
 function officialSourceName(sourceUrl: string) {
   const host = new URL(sourceUrl).hostname.toLowerCase();

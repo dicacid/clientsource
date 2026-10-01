@@ -8,6 +8,7 @@ import {
   parseAustralianLocalDate,
   parseConsolidatedTenderText,
   parseNswOpportunityText,
+  parseTasmanianOpenTenderText,
   scoreTender,
 } from "../src/lib/spa/tenders.ts";
 
@@ -139,4 +140,33 @@ test("official-search fallback only accepts approved Australian procurement host
   assert.equal(isOfficialAustralianProcurementUrl("https://www.tenders.tas.gov.au/OpenForBids/List/Public/ClosingDate"), true);
   assert.equal(isOfficialAustralianProcurementUrl("https://example-tender-aggregator.com/nsw/solar"), false);
   assert.equal(isOfficialAustralianProcurementUrl("http://buy.nsw.gov.au/opportunity/search"), false);
+});
+
+
+test("parses Tasmanian open tender list records", () => {
+  const rows = parseTasmanianOpenTenderText(
+    [
+      "Open for Bids - Sorted by Closing Date",
+      "Files",
+      "Title",
+      "Agency",
+      "Opened",
+      "Closes: 09/10/2026, at 02:00 PM",
+      "Operations Management and Control System (3930)",
+      "UNSPSC Category: Information Technology Broadcasting and Telecommunications",
+      "Building Tasmania",
+      "22/08/2026",
+      "Closes: 21/10/2026, at 02:00 PM",
+      "Dodges Ferry Primary School - Major Redevelopment (J959)",
+      "UNSPSC Category: Building and Facility Construction and Maintenance Services",
+      "Department for Education, Children and Young People",
+      "05/09/2026",
+    ].join("\n"),
+    "https://www.tenders.tas.gov.au/OpenForBids/List/Public/ClosingDate",
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].referenceNumber, "3930");
+  assert.equal(rows[0].issuer, "Building Tasmania");
+  assert.equal(rows[0].closingDateRaw, "09/10/2026 02:00 PM");
+  assert.equal(rows[1].referenceNumber, "J959");
 });
