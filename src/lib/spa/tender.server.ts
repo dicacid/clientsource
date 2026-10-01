@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import Papa from "papaparse";
-import { createClient, type RedisClientType } from "redis";
+import { createRedisConnection } from "../../integrations/render/redis.server";
 import { getAiRuntime } from "./openrouter.server";
 import { requestJsonResponse } from "./json-response.server";
+import { retrieveQueenslandPipeline } from "./qld-procurement.server";
+import { isStaleScan, mapConcurrent } from "./scan-runtime";
 import {
   businessRouting,
   canonicalUrl,
@@ -41,6 +42,7 @@ export type TenderScanRun = {
   state: "running" | "success" | "partial" | "failed";
   stage: "Starting" | "Checking sources" | "Retrieving opportunities" | "Verifying" | "Deduplicating" | "Analysing relevance" | "Saving" | "Complete";
   sourcesAttempted: number;
+  sourcesTotal?: number;
   sourceSuccesses: number;
   sourceFailures: number;
   sourceAttempts: SourceAttempt[];
@@ -66,26 +68,11 @@ type TenderSourceAdapter = {
   retrieve: () => Promise<RawTender[]>;
 };
 
-let client: RedisClientType | null = null;
-let connectPromise: Promise<RedisClientType> | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
 
 const storeKey = (orgId: string) => `spa-intelligence:tenders:v1:${orgId}`;
 
-async function redis(): Promise<RedisClientType> {
-  if (client?.isOpen) return client;
-  if (!connectPromise) {
-    const url = process.env["REDIS_URL"];
-    if (!url) throw new Error("REDIS_URL is not configured.");
-    const next = createClient({ url });
-    next.on("error", (error) => console.error("[SPA Intelligence tender store]", error));
-    connectPromise = next.connect().then(() => {
-      client = next as RedisClientType;
-      return client;
-    });
-  }
-  return connectPromise;
-}
+const redis = createRedisConnection("tenders");
 
 function emptyStore(): TenderStore {
   return { records: [], audits: [], currentScan: null };
@@ -254,164 +241,7 @@ const townsvilleAdapter: TenderSourceAdapter = {
 const queenslandForwardProcurementAdapter: TenderSourceAdapter = {
   id: "qld-forward-procurement",
   name: "Queensland Government Forward Procurement Pipeline",
-  async retrieve() {
-    const resourceId = "d3968658-dbb7-4732-bc19-467c49de23de";
-    const datasetUrl = "https://www.data.qld.gov.au/dataset/forward-procurement-pipeline/resource/" + resourceId;
-    const apiUrl = "https://www.data.qld.gov.au/api/3/action/datastore_search?resource_id=" +
-      resourceId + "&limit=1000";
-
-    type QldForwardRow = {
-      "_id"?: number;
-      "Agency"?: string;
-      "Business Unit"?: string | null;
-      "Category Group"?: string | null;
-      "Category"?: string | null;
-      "Program Description"?: string;
-      "Estimated Timing for Release to Market"?: string | null;
-      "Procurement Method"?: string | null;
-      "Spend Range"?: string | null;
-      "Funding Status"?: string | null;
-      "Region SA4"?: string | null;
-      "Agency Region"?: string | null;
-      "Link"?: string | null;
-      "Brisbane 2032 related"?: string | null;
-    };
-
-    type QldPayload = {
-      success?: boolean;
-      result?: { records?: QldForwardRow[]; total?: number };
-    };
-    let records: QldForwardRow[] = [];
-    let dumpFailure: unknown = null;
-    try {
-      const dumpUrl = `https://data.qld.gov.au/datastore/dump/${resourceId}?bom=True`;
-      const response = await fetch(dumpUrl, {
-        headers: {
-          Accept: "text/csv,text/plain,*/*",
-          "User-Agent": "Mozilla/5.0 (compatible; SPA-Intelligence/1.0; +https://spa-intelligence.onrender.com)",
-        },
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status} from data.qld.gov.au`);
-      const csv = await response.text();
-      const parsed = Papa.parse<QldForwardRow>(csv.replace(/^\uFEFF/, ""), {
-        header: true,
-        skipEmptyLines: "greedy",
-      });
-      records = parsed.data.filter((row) => row && Object.keys(row).length > 0);
-      if (!records.length) throw new Error("Queensland datastore dump contained no records.");
-    } catch (error) {
-      dumpFailure = error;
-    }
-
-    if (!records.length) try {
-      const pageSize = 100;
-      const firstUrl = apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=0`);
-      const first = await fetchedJson<QldPayload>(firstUrl, 18000);
-      if (!first.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
-
-      const total = Number(first.result?.total ?? first.result?.records?.length ?? 0);
-      records.push(...(first.result?.records ?? []));
-      const offsets = Array.from(
-        { length: Math.max(0, Math.ceil(total / pageSize) - 1) },
-        (_, index) => (index + 1) * pageSize,
-      );
-      for (let i = 0; i < offsets.length; i += 4) {
-        const batch = offsets.slice(i, i + 4);
-        const pages = await Promise.all(batch.map((offset) =>
-          fetchedJson<QldPayload>(
-            apiUrl.replace("&limit=1000", `&limit=${pageSize}&offset=${offset}`),
-            18000,
-          )
-        ));
-        for (const page of pages) {
-          if (!page.success) throw new Error("Queensland open-data portal returned an unsuccessful CKAN response.");
-          records.push(...(page.result?.records ?? []));
-        }
-      }
-    } catch (apiError) {
-      const csvUrl = "https://www.data.qld.gov.au/dataset/2ee69f84-0495-46b4-8640-af85b148f16b/resource/" +
-        resourceId + "/download/forward-procurement-pipeline-sept-2026.csv";
-      const response = await fetch(csvUrl, {
-        headers: {
-          Accept: "text/csv,text/plain,*/*",
-          "User-Agent": "SPA-Intelligence-Tender-Monitor/1.0 (+https://spa-intelligence.onrender.com)",
-        },
-        signal: AbortSignal.timeout(20000),
-      });
-      if (!response.ok) {
-        const detail = apiError instanceof Error ? apiError.message : String(apiError);
-        throw new Error(`Queensland CKAN API failed (${detail}) and CSV fallback returned HTTP ${response.status}.`);
-      }
-      const csv = await response.text();
-      const parsed = Papa.parse<QldForwardRow>(csv, { header: true, skipEmptyLines: "greedy" });
-      records = parsed.data.filter((row) => row && Object.keys(row).length > 0);
-      if (!records.length) {
-        const apiDetail = apiError instanceof Error ? apiError.message : String(apiError);
-        const dumpDetail = dumpFailure instanceof Error ? dumpFailure.message : String(dumpFailure ?? "not attempted");
-        throw new Error(`Queensland datastore dump failed (${dumpDetail}); CKAN API failed (${apiDetail}); CSV fallback contained no records.`);
-      }
-    }
-
-    const relevant = /\b(?:solar|photovoltaic|\bpv\b|battery|\bbess\b|energy storage|renewable|microgrid|off[- ]grid|hybrid power|electric(?:al|ity)?|power (?:system|supply|infrastructure|station|generation)|generator|substation|transformer|switchboard|high voltage|low voltage|ev charging|electric vehicle|electrification|charging infrastructure|lithium|inverter|decarboni[sz]|distributed energy|hydrogen)\b/i;
-
-    return records.flatMap((row) => {
-      const title = String(row["Program Description"] ?? "").trim();
-      const issuer = String(row["Agency"] ?? "").trim();
-      if (!title || !issuer) return [];
-
-      const relevanceText = [
-        title,
-        row["Category Group"],
-        row["Category"],
-        row["Business Unit"],
-      ].filter(Boolean).join(" ");
-      if (!relevant.test(relevanceText)) return [];
-
-      const rowId = Number(row["_id"]);
-      if (!Number.isFinite(rowId)) return [];
-
-      const method = String(row["Procurement Method"] ?? "").trim();
-      const timing = String(row["Estimated Timing for Release to Market"] ?? "").trim();
-      const spend = String(row["Spend Range"] ?? "").trim();
-      const funding = String(row["Funding Status"] ?? "").trim();
-      const region = String(row["Region SA4"] ?? row["Agency Region"] ?? "").trim();
-      const categoryGroup = String(row["Category Group"] ?? "").trim();
-      const category = String(row["Category"] ?? "").trim();
-      const publishedLink = String(row["Link"] ?? "").trim();
-      const verifiedLinks = isOfficialAustralianProcurementUrl(publishedLink) ? [publishedLink] : [];
-
-      const summaryParts = [
-        categoryGroup ? `Category group: ${categoryGroup}.` : "",
-        category ? `Category: ${category}.` : "",
-        timing ? `Estimated release to market: ${timing}.` : "",
-        method ? `Procurement method: ${method}.` : "",
-        spend ? `Published estimated spend range: ${spend}.` : "",
-        funding ? `Funding status: ${funding}.` : "",
-      ].filter(Boolean);
-
-      return [{
-        sourceName: "Queensland Government Forward Procurement Pipeline",
-        sourceSpecificId: `qld-fpp-${rowId}`,
-        sourceUrl: datasetUrl,
-        tenderTitle: title.slice(0, 500),
-        issuer: issuer.slice(0, 240),
-        referenceNumber: null,
-        opportunityType: method ? `Forward procurement · ${method}` : "Forward procurement",
-        category: [categoryGroup, category].filter(Boolean).join(" · ").slice(0, 500) || null,
-        summary: summaryParts.join(" ").slice(0, 2000) || null,
-        publishedDateRaw: null,
-        closingDateRaw: null,
-        timezone: "Australia/Brisbane",
-        country: "Australia",
-        state: "QLD",
-        location: region ? `${region}, Queensland` : "Queensland",
-        documentedContractValue: null,
-        tenderDocumentLinks: verifiedLinks,
-        sourceStatus: "unknown" as const,
-      }];
-    });
-  },
+  retrieve: retrieveQueenslandPipeline,
 };
 
 const tasmaniaAdapter: TenderSourceAdapter = {
@@ -634,7 +464,21 @@ Do not use news articles, tender aggregators, LinkedIn, directories, supplier si
   return { rows, modelUsed: response.modelUsed };
 }
 
+let sourceHealthCache: { value: Awaited<ReturnType<typeof checkTenderSources>>; expiresAt: number } | null = null;
+let sourceHealthPending: Promise<Awaited<ReturnType<typeof checkTenderSources>>> | null = null;
+
 export async function tenderSourceHealth() {
+  if (sourceHealthCache && sourceHealthCache.expiresAt > Date.now()) return sourceHealthCache.value;
+  if (!sourceHealthPending) {
+    sourceHealthPending = checkTenderSources().then((value) => {
+      sourceHealthCache = { value, expiresAt: Date.now() + 5 * 60 * 1000 };
+      return value;
+    }).finally(() => { sourceHealthPending = null; });
+  }
+  return sourceHealthPending;
+}
+
+async function checkTenderSources() {
   const sources: Array<{
     sourceId: string;
     sourceName: string;
@@ -644,7 +488,7 @@ export async function tenderSourceHealth() {
     durationMs: number;
   }> = [];
 
-  for (const adapter of ADAPTERS) {
+  await mapConcurrent(ADAPTERS, 3, async (adapter) => {
     const started = Date.now();
     try {
       const rows = await adapter.retrieve();
@@ -667,7 +511,7 @@ export async function tenderSourceHealth() {
         durationMs: Date.now() - started,
       });
     }
-  }
+  });
 
   return {
     checkedAt: new Date().toISOString(),
@@ -679,14 +523,8 @@ export async function tenderSourceHealth() {
 }
 
 function normalizeRaw(raw: RawTender, now: string): TenderRecord {
-  const closeTimestamp = raw.closingDateRaw?.includes("T")
-    ? (Number.isFinite(Date.parse(raw.closingDateRaw)) ? new Date(raw.closingDateRaw).toISOString() : null)
-    : parseAustralianLocalDate(raw.closingDateRaw, raw.timezone ?? "Australia/Sydney");
-  const published = raw.publishedDateRaw
-    ? (raw.publishedDateRaw.includes("T")
-      ? (Number.isFinite(Date.parse(raw.publishedDateRaw)) ? new Date(raw.publishedDateRaw).toISOString() : null)
-      : parseAustralianLocalDate(raw.publishedDateRaw, raw.timezone ?? "Australia/Sydney"))
-    : null;
+  const closeTimestamp = parseAustralianLocalDate(raw.closingDateRaw, raw.timezone ?? "Australia/Sydney");
+  const published = parseAustralianLocalDate(raw.publishedDateRaw, raw.timezone ?? "Australia/Sydney");
   const sourceClassification: TenderEvidence["classification"] =
     raw.retrievalMethod === "search" ? "SOURCE_CLAIM" : "OBSERVED_FACT";
   const evidence: TenderEvidence[] = [
@@ -965,7 +803,21 @@ export async function tenderAudits(orgId: string) {
 }
 
 export async function tenderScanState(orgId: string) {
-  return (await readStore(orgId)).currentScan;
+  const current = (await readStore(orgId)).currentScan;
+  if (current && isStaleScan(current)) {
+    return mutateStore(orgId, (store) => {
+      const stale = store.currentScan;
+      if (!stale || !isStaleScan(stale)) return stale;
+      stale.state = "failed";
+      stale.stage = "Complete";
+      stale.endedAt = new Date().toISOString();
+      stale.durationMs = Date.now() - Date.parse(stale.startedAt);
+      stale.errors.push("The scan was interrupted or exceeded its 15-minute lease. Run a new scan to retry.");
+      if (!store.audits.some((audit) => audit.id === stale.id)) store.audits.unshift(stale);
+      return stale;
+    });
+  }
+  return current;
 }
 
 export async function setTenderWorkflow(orgId: string, id: string, workflowStatus: TenderWorkflowStatus) {
@@ -987,15 +839,21 @@ export async function saveTenderNotes(orgId: string, id: string, notes: string) 
   });
 }
 
-export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
+export async function runTenderScan(orgId: string, background = false): Promise<TenderScanRun> {
   const r = await redis();
   const lockKey = storeKey(orgId) + ":scan-lock";
   const lockToken = randomUUID();
   const acquired = await r.set(lockKey, lockToken, { NX: true, EX: 900 });
-  if (!acquired) throw new Error("A Tender Intelligence scan is already running for this workspace.");
+  if (!acquired) {
+    const current = await tenderScanState(orgId);
+    if (current?.state === "running") return current;
+    throw new Error("A Tender Intelligence scan is already starting for this workspace. Refresh shortly.");
+  }
   const releaseLock = async () => {
     try {
-      if (await r.get(lockKey) === lockToken) await r.del(lockKey);
+      await r.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", {
+        keys: [lockKey], arguments: [lockToken],
+      });
     } catch {
       // TTL is the fallback if lock cleanup itself fails.
     }
@@ -1010,6 +868,7 @@ export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
     state: "running",
     stage: "Starting",
     sourcesAttempted: 0,
+    sourcesTotal: ADAPTERS.length,
     sourceSuccesses: 0,
     sourceFailures: 0,
     sourceAttempts: [],
@@ -1022,186 +881,201 @@ export async function runTenderScan(orgId: string): Promise<TenderScanRun> {
     selectedModel: null,
     errors: [],
   };
-  await persistScanProgress(orgId, run);
-
   try {
-    run.stage = "Checking sources";
     await persistScanProgress(orgId, run);
-
-    run.stage = "Retrieving opportunities";
-    await persistScanProgress(orgId, run);
-    const rawRows: RawTender[] = [];
-    for (const adapter of ADAPTERS) {
-      const sourceStart = Date.now();
-      run.sourcesAttempted++;
-      try {
-        const rows = await adapter.retrieve();
-        rawRows.push(...rows);
-        run.sourceSuccesses++;
-        run.sourceAttempts.push({
-          sourceId: adapter.id, sourceName: adapter.name, status: "success",
-          retrieved: rows.length, error: null, durationMs: Date.now() - sourceStart,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        run.sourceFailures++;
-        run.errors.push(`${adapter.name}: ${message}`);
-        run.sourceAttempts.push({
-          sourceId: adapter.id, sourceName: adapter.name,
-          status: /parser|reliably|stable public feed/i.test(message) ? "limited" : "failed",
-          retrieved: 0, error: message, durationMs: Date.now() - sourceStart,
-        });
-      }
-      await persistScanProgress(orgId, run);
-    }
-
-    const failedSourceNames = run.sourceAttempts
-      .filter((source) => source.status !== "success")
-      .map((source) => source.sourceName);
-    if (failedSourceNames.length) {
-      const fallbackStart = Date.now();
-      run.sourcesAttempted++;
-      try {
-        const fallback = await officialWebSearchFallback(orgId, failedSourceNames);
-        rawRows.push(...fallback.rows);
-        run.sourceSuccesses++;
-        run.selectedModel = fallback.modelUsed;
-        run.sourceAttempts.push({
-          sourceId: "official-web-search-fallback",
-          sourceName: "Official procurement indexed-search fallback",
-          status: "success",
-          retrieved: fallback.rows.length,
-          error: null,
-          durationMs: Date.now() - fallbackStart,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        run.sourceFailures++;
-        run.errors.push(`Official procurement indexed-search fallback: ${message}`);
-        run.sourceAttempts.push({
-          sourceId: "official-web-search-fallback",
-          sourceName: "Official procurement indexed-search fallback",
-          status: "limited",
-          retrieved: 0,
-          error: message,
-          durationMs: Date.now() - fallbackStart,
-        });
-      }
-      await persistScanProgress(orgId, run);
-    }
-
-    run.opportunitiesDiscovered = rawRows.length;
-
-    run.stage = "Verifying";
-    await persistScanProgress(orgId, run);
-    const verified = rawRows.filter((row) =>
-      !!row.tenderTitle.trim() &&
-      !!row.issuer.trim() &&
-      !!row.sourceName.trim() &&
-      !!row.sourceSpecificId.trim() &&
-      /^https?:\/\//i.test(row.sourceUrl) &&
-      (row.retrievalMethod !== "search" || isOfficialAustralianProcurementUrl(row.sourceUrl))
-    );
-
-    run.stage = "Deduplicating";
-    await persistScanProgress(orgId, run);
-    const now = new Date().toISOString();
-    const unique = new Map<string, TenderRecord>();
-    const secondary = new Map<string, string>();
-    for (const raw of verified) {
-      const primaryKey = deterministicTenderKey(raw);
-      const secondaryKey = secondaryTenderKey(raw);
-      const existingKey = unique.has(primaryKey) ? primaryKey : secondary.get(secondaryKey);
-      if (existingKey) {
-        const current = unique.get(existingKey)!;
-        const candidate = normalizeRaw(raw, now);
-        current.sourceHistory.push(...candidate.sourceHistory.filter((ref) =>
-          !current.sourceHistory.some((old) => old.sourceName === ref.sourceName && old.sourceSpecificId === ref.sourceSpecificId)
-        ));
-        run.duplicatesRemoved++;
-      } else {
-        const record = normalizeRaw(raw, now);
-        unique.set(primaryKey, record);
-        secondary.set(secondaryKey, primaryKey);
-      }
-    }
-
-    run.stage = "Analysing relevance";
-    await persistScanProgress(orgId, run);
-    const incoming = [...unique.values()];
-    await enrichRelevant(incoming, orgId, run);
-
-    run.stage = "Saving";
-    await persistScanProgress(orgId, run);
-    await mutateStore(orgId, (store) => {
-      for (const fresh of incoming) {
-        const existing = store.records.find((record) =>
-          record.sourceHistory.some((ref) =>
-            ref.sourceName === fresh.sourceName && ref.sourceSpecificId === fresh.sourceSpecificId
-          ) ||
-          (record.referenceNumber && fresh.referenceNumber &&
-            record.referenceNumber === fresh.referenceNumber &&
-            record.issuer.toLowerCase() === fresh.issuer.toLowerCase()) ||
-          secondaryTenderKey({
-            issuer: record.issuer,
-            tenderTitle: record.tenderTitle,
-            closingDateRaw: record.closingDateTime,
-            location: record.location,
-          }) === secondaryTenderKey({
-            issuer: fresh.issuer,
-            tenderTitle: fresh.tenderTitle,
-            closingDateRaw: fresh.closingDateTime,
-            location: fresh.location,
-          })
-        );
-
-        if (!existing) {
-          store.records.push(fresh);
-          run.newTenders++;
-          continue;
-        }
-
-        const changed = !sameMaterial(existing, fresh);
-        if (changed) {
-          mergeRecord(existing, fresh, now);
-          run.updatedTenders++;
-        } else {
-          existing.lastChecked = now;
-          const ref = existing.sourceHistory.find((item) =>
-            item.sourceName === fresh.sourceName && item.sourceSpecificId === fresh.sourceSpecificId
-          );
-          if (ref) ref.lastSeenAt = now;
-          if (classifyClosing(existing.normalizedCloseTimestamp) === "expired" && ["New", "Review", "Interested"].includes(existing.workflowStatus)) {
-            existing.workflowStatus = "Expired";
-          }
-          run.unchangedTenders++;
-        }
-      }
-    });
-
-    run.endedAt = new Date().toISOString();
-    run.durationMs = Date.now() - started;
-    run.state = run.sourceSuccesses === 0 ? "failed" : run.sourceFailures ? "partial" : "success";
-    run.stage = "Complete";
-    await mutateStore(orgId, (store) => {
-      store.currentScan = run;
-      store.audits.unshift(run);
-      store.audits = store.audits.slice(0, 50);
-    });
-    await releaseLock();
-    return run;
   } catch (error) {
-    run.errors.push(error instanceof Error ? error.message : String(error));
-    run.endedAt = new Date().toISOString();
-    run.durationMs = Date.now() - started;
-    run.state = "failed";
-    run.stage = "Complete";
-    await mutateStore(orgId, (store) => {
-      store.currentScan = run;
-      store.audits.unshift(run);
-      store.audits = store.audits.slice(0, 50);
-    });
     await releaseLock();
+    throw error;
+  }
+
+  const execute = async (): Promise<TenderScanRun> => {
+    try {
+      run.stage = "Checking sources";
+      await persistScanProgress(orgId, run);
+
+      run.stage = "Retrieving opportunities";
+      await persistScanProgress(orgId, run);
+      const rawRows: RawTender[] = [];
+      await mapConcurrent(ADAPTERS, 3, async (adapter) => {
+        const sourceStart = Date.now();
+        run.sourcesAttempted++;
+        try {
+          const rows = await adapter.retrieve();
+          rawRows.push(...rows);
+          run.sourceSuccesses++;
+          run.sourceAttempts.push({
+            sourceId: adapter.id, sourceName: adapter.name, status: "success",
+            retrieved: rows.length, error: null, durationMs: Date.now() - sourceStart,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          run.sourceFailures++;
+          run.errors.push(`${adapter.name}: ${message}`);
+          run.sourceAttempts.push({
+            sourceId: adapter.id, sourceName: adapter.name,
+            status: /parser|reliably|stable public feed/i.test(message) ? "limited" : "failed",
+            retrieved: 0, error: message, durationMs: Date.now() - sourceStart,
+          });
+        }
+        run.opportunitiesDiscovered = rawRows.length;
+        await persistScanProgress(orgId, run);
+      });
+
+      const failedSourceNames = run.sourceAttempts
+        .filter((source) => source.status !== "success")
+        .map((source) => source.sourceName);
+      if (failedSourceNames.length) {
+        const fallbackStart = Date.now();
+        run.sourcesTotal = ADAPTERS.length + 1;
+        run.sourcesAttempted++;
+        try {
+          const fallback = await officialWebSearchFallback(orgId, failedSourceNames);
+          rawRows.push(...fallback.rows);
+          run.sourceSuccesses++;
+          run.selectedModel = fallback.modelUsed;
+          run.sourceAttempts.push({
+            sourceId: "official-web-search-fallback",
+            sourceName: "Official procurement indexed-search fallback",
+            status: "success",
+            retrieved: fallback.rows.length,
+            error: null,
+            durationMs: Date.now() - fallbackStart,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          run.sourceFailures++;
+          run.errors.push(`Official procurement indexed-search fallback: ${message}`);
+          run.sourceAttempts.push({
+            sourceId: "official-web-search-fallback",
+            sourceName: "Official procurement indexed-search fallback",
+            status: "limited",
+            retrieved: 0,
+            error: message,
+            durationMs: Date.now() - fallbackStart,
+          });
+        }
+        await persistScanProgress(orgId, run);
+      }
+
+      run.opportunitiesDiscovered = rawRows.length;
+
+      run.stage = "Verifying";
+      await persistScanProgress(orgId, run);
+      const verified = rawRows.filter((row) =>
+        !!row.tenderTitle.trim() &&
+        !!row.issuer.trim() &&
+        !!row.sourceName.trim() &&
+        !!row.sourceSpecificId.trim() &&
+        /^https?:\/\//i.test(row.sourceUrl) &&
+        (row.retrievalMethod !== "search" || isOfficialAustralianProcurementUrl(row.sourceUrl))
+      );
+
+      run.stage = "Deduplicating";
+      await persistScanProgress(orgId, run);
+      const now = new Date().toISOString();
+      const unique = new Map<string, TenderRecord>();
+      const secondary = new Map<string, string>();
+      for (const raw of verified) {
+        const primaryKey = deterministicTenderKey(raw);
+        const secondaryKey = secondaryTenderKey(raw);
+        const existingKey = unique.has(primaryKey) ? primaryKey : secondary.get(secondaryKey);
+        if (existingKey) {
+          const current = unique.get(existingKey)!;
+          const candidate = normalizeRaw(raw, now);
+          current.sourceHistory.push(...candidate.sourceHistory.filter((ref) =>
+            !current.sourceHistory.some((old) => old.sourceName === ref.sourceName && old.sourceSpecificId === ref.sourceSpecificId)
+          ));
+          run.duplicatesRemoved++;
+        } else {
+          const record = normalizeRaw(raw, now);
+          unique.set(primaryKey, record);
+          secondary.set(secondaryKey, primaryKey);
+        }
+      }
+
+      run.stage = "Analysing relevance";
+      await persistScanProgress(orgId, run);
+      const incoming = [...unique.values()];
+      await enrichRelevant(incoming, orgId, run);
+
+      run.stage = "Saving";
+      await persistScanProgress(orgId, run);
+      await mutateStore(orgId, (store) => {
+        for (const fresh of incoming) {
+          const existing = store.records.find((record) =>
+            record.sourceHistory.some((ref) =>
+              ref.sourceName === fresh.sourceName && ref.sourceSpecificId === fresh.sourceSpecificId
+            ) ||
+            (record.referenceNumber && fresh.referenceNumber &&
+              record.referenceNumber === fresh.referenceNumber &&
+              record.issuer.toLowerCase() === fresh.issuer.toLowerCase()) ||
+            secondaryTenderKey({
+              issuer: record.issuer,
+              tenderTitle: record.tenderTitle,
+              closingDateRaw: record.closingDateTime,
+              location: record.location,
+            }) === secondaryTenderKey({
+              issuer: fresh.issuer,
+              tenderTitle: fresh.tenderTitle,
+              closingDateRaw: fresh.closingDateTime,
+              location: fresh.location,
+            })
+          );
+
+          if (!existing) {
+            store.records.push(fresh);
+            run.newTenders++;
+            continue;
+          }
+
+          const changed = !sameMaterial(existing, fresh);
+          if (changed) {
+            mergeRecord(existing, fresh, now);
+            run.updatedTenders++;
+          } else {
+            existing.lastChecked = now;
+            const ref = existing.sourceHistory.find((item) =>
+              item.sourceName === fresh.sourceName && item.sourceSpecificId === fresh.sourceSpecificId
+            );
+            if (ref) ref.lastSeenAt = now;
+            if (classifyClosing(existing.normalizedCloseTimestamp) === "expired" && ["New", "Review", "Interested"].includes(existing.workflowStatus)) {
+              existing.workflowStatus = "Expired";
+            }
+            run.unchangedTenders++;
+          }
+        }
+      });
+
+      run.endedAt = new Date().toISOString();
+      run.durationMs = Date.now() - started;
+      run.state = run.sourceSuccesses === 0 ? "failed" : run.sourceFailures || run.errors.length ? "partial" : "success";
+      run.stage = "Complete";
+      await mutateStore(orgId, (store) => {
+        store.currentScan = run;
+        store.audits.unshift(run);
+        store.audits = store.audits.slice(0, 50);
+      });
+      return run;
+    } catch (error) {
+      run.errors.push(error instanceof Error ? error.message : String(error));
+      run.endedAt = new Date().toISOString();
+      run.durationMs = Date.now() - started;
+      run.state = "failed";
+      run.stage = "Complete";
+      await mutateStore(orgId, (store) => {
+        store.currentScan = run;
+        store.audits.unshift(run);
+        store.audits = store.audits.slice(0, 50);
+      });
+      return run;
+    } finally {
+      await releaseLock();
+    }
+  };
+
+  if (background) {
+    void execute().catch(() => console.error("[SPA Intelligence] Tender scan persistence failed", { scanId: run.id }));
     return run;
   }
+  return execute();
 }

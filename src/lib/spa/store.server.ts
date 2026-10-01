@@ -1,24 +1,10 @@
-import { createClient, type RedisClientType } from "redis";
+import { createRedisConnection } from "../../integrations/render/redis.server";
 import { randomUUID } from "node:crypto";
+import { toJsonValue, type JsonValue } from "../json";
 
-let client: RedisClientType | null = null;
-let connectPromise: Promise<RedisClientType> | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
 
-async function redis(): Promise<RedisClientType> {
-  if (client?.isOpen) return client;
-  if (!connectPromise) {
-    const url = process.env["REDIS_URL"];
-    if (!url) throw new Error("REDIS_URL is not configured.");
-    const next = createClient({ url });
-    next.on("error", (error) => console.error("[SPA Intelligence workspace store]", error));
-    connectPromise = next.connect().then(() => {
-      client = next as RedisClientType;
-      return client;
-    });
-  }
-  return connectPromise;
-}
+const redis = createRedisConnection("workspace");
 
 const historyKey = (orgId: string) => `spa-intelligence:history:v1:${orgId}`;
 const approvalKey = (orgId: string) => `spa-intelligence:approvals:v1:${orgId}`;
@@ -33,7 +19,7 @@ export type ResearchRunRecord = {
   researchedAt: string;
   modelUsed: string;
   status: "completed" | "partial" | "failed";
-  result: unknown;
+  result: JsonValue;
 };
 
 export type ApprovalState =
@@ -48,12 +34,12 @@ export type ApprovalItemRecord = {
   state: ApprovalState;
   createdAt: string;
   updatedAt: string;
-  payload: unknown;
+  payload: JsonValue;
 };
 
-export async function saveResearchRun(orgId: string, input: Omit<ResearchRunRecord, "id">) {
+export async function saveResearchRun(orgId: string, input: Omit<ResearchRunRecord, "id" | "result"> & { result: unknown }) {
   const r = await redis();
-  const record: ResearchRunRecord = { id: randomUUID(), ...input };
+  const record: ResearchRunRecord = { id: randomUUID(), ...input, result: toJsonValue(input.result) };
   await r.lPush(historyKey(orgId), JSON.stringify(record));
   await r.lTrim(historyKey(orgId), 0, 99);
   return record;
@@ -88,7 +74,7 @@ export async function createApprovalItem(orgId: string, title: string, kind: str
   const run = writeQueue.catch(() => undefined).then(async () => {
     const items = await readApprovals(orgId);
     const now = new Date().toISOString();
-    created = { id: randomUUID(), title, kind, state: "AWAITING APPROVAL", createdAt: now, updatedAt: now, payload };
+    created = { id: randomUUID(), title, kind, state: "AWAITING APPROVAL", createdAt: now, updatedAt: now, payload: toJsonValue(payload) };
     await writeApprovals(orgId, [created, ...items]);
   });
   writeQueue = run;
@@ -143,7 +129,7 @@ export type CompetitorRecord = {
   discoveredAt: string;
   updatedAt: string;
   lastAnalysedAt: string | null;
-  analysis: unknown | null;
+  analysis: JsonValue;
 };
 
 async function readCompetitors(orgId: string): Promise<CompetitorRecord[]> {
@@ -221,7 +207,7 @@ export async function saveCompetitorAnalysis(orgId: string, competitorId: string
   const row = rows.find((item) => item.id === competitorId);
   if (!row) throw new Error("Competitor record not found.");
   const now = new Date().toISOString();
-  row.analysis = analysis;
+  row.analysis = toJsonValue(analysis);
   row.lastAnalysedAt = now;
   row.updatedAt = now;
   await writeCompetitors(orgId, rows);

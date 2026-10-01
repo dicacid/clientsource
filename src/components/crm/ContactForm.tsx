@@ -143,7 +143,7 @@ export function ContactForm({
                 <SelectValue placeholder={companies.isLoading ? "Loading…" : "Choose company"} />
               </SelectTrigger>
               <SelectContent>
-                {(companies.data ?? []).map((c) => (
+                {(companies.data ?? []).map((c: any) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
                   </SelectItem>

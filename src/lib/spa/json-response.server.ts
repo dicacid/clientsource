@@ -1,4 +1,5 @@
 import { jsonrepair } from "jsonrepair";
+import { assertResearchModel } from "./model-compatibility.ts";
 
 export class AiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -58,6 +59,7 @@ export async function requestJsonResponse<T>(options: {
   apiKey: string; model: string; system: string; user: string;
   tools?: unknown[]; effort?: "low" | "medium";
 }): Promise<{ data: T; modelUsed: string; usage: Usage | null }> {
+  assertResearchModel(options.model);
   const messages: Message[] = [
     { role: "system", content: options.system + "\nReturn one complete JSON object only. Keep prose concise, arrays bounded to the requested sizes, and strings to at most 100 words. No narration or markdown." },
     { role: "user", content: options.user },

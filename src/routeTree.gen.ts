@@ -12,15 +12,23 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as HealthRouteImport } from './routes/health'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedAppCapabilitiesRouteImport } from './routes/_authenticated/_app/capabilities'
 import { Route as AuthenticatedAppCompaniesRouteImport } from './routes/_authenticated/_app/companies'
 import { Route as AuthenticatedAppContactsRouteImport } from './routes/_authenticated/_app/contacts'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app/dashboard'
 import { Route as AuthenticatedAppImportRouteImport } from './routes/_authenticated/_app/import'
 import { Route as AuthenticatedAppMembersRouteImport } from './routes/_authenticated/_app/members'
 import { Route as AuthenticatedAppProspectRouteImport } from './routes/_authenticated/_app/prospect'
+import { Route as AuthenticatedAppProspectsRouteImport } from './routes/_authenticated/_app/prospects'
 import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenticated/_app/settings'
+import { Route as AuthenticatedAppTendersRouteImport } from './routes/_authenticated/_app/tenders'
+import { Route as ApiTendersCronRouteImport } from './routes/api.tenders.cron'
+import { Route as ApiTendersSourceHealthRouteImport } from './routes/api.tenders.source-health'
+import { Route as AuthenticatedAppTendersTenderIdRouteImport } from './routes/_authenticated/_app/tenders.$tenderId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -36,6 +44,16 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HealthRoute = HealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/_app',
   getParentRoute: () => AuthenticatedRouteRoute,
@@ -45,6 +63,12 @@ const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppCapabilitiesRoute =
+  AuthenticatedAppCapabilitiesRouteImport.update({
+    id: '/capabilities',
+    path: '/capabilities',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppCompaniesRoute =
   AuthenticatedAppCompaniesRouteImport.update({
     id: '/companies',
@@ -79,97 +103,176 @@ const AuthenticatedAppProspectRoute =
     path: '/prospect',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppProspectsRoute =
+  AuthenticatedAppProspectsRouteImport.update({
+    id: '/prospects',
+    path: '/prospects',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppSettingsRoute =
   AuthenticatedAppSettingsRouteImport.update({
     id: '/settings',
     path: '/settings',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppTendersRoute = AuthenticatedAppTendersRouteImport.update({
+  id: '/tenders',
+  path: '/tenders',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const ApiTendersCronRoute = ApiTendersCronRouteImport.update({
+  id: '/api/tenders/cron',
+  path: '/api/tenders/cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTendersSourceHealthRoute = ApiTendersSourceHealthRouteImport.update({
+  id: '/api/tenders/source-health',
+  path: '/api/tenders/source-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAppTendersTenderIdRoute =
+  AuthenticatedAppTendersTenderIdRouteImport.update({
+    id: '/$tenderId',
+    path: '/$tenderId',
+    getParentRoute: () => AuthenticatedAppTendersRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/health': typeof HealthRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/capabilities': typeof AuthenticatedAppCapabilitiesRoute
   '/companies': typeof AuthenticatedAppCompaniesRoute
   '/contacts': typeof AuthenticatedAppContactsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
   '/import': typeof AuthenticatedAppImportRoute
   '/members': typeof AuthenticatedAppMembersRoute
   '/prospect': typeof AuthenticatedAppProspectRoute
+  '/prospects': typeof AuthenticatedAppProspectsRoute
   '/settings': typeof AuthenticatedAppSettingsRoute
+  '/tenders': typeof AuthenticatedAppTendersRouteWithChildren
+  '/api/tenders/cron': typeof ApiTendersCronRoute
+  '/api/tenders/source-health': typeof ApiTendersSourceHealthRoute
+  '/tenders/$tenderId': typeof AuthenticatedAppTendersTenderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/health': typeof HealthRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/capabilities': typeof AuthenticatedAppCapabilitiesRoute
   '/companies': typeof AuthenticatedAppCompaniesRoute
   '/contacts': typeof AuthenticatedAppContactsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
   '/import': typeof AuthenticatedAppImportRoute
   '/members': typeof AuthenticatedAppMembersRoute
   '/prospect': typeof AuthenticatedAppProspectRoute
+  '/prospects': typeof AuthenticatedAppProspectsRoute
   '/settings': typeof AuthenticatedAppSettingsRoute
+  '/tenders': typeof AuthenticatedAppTendersRouteWithChildren
+  '/api/tenders/cron': typeof ApiTendersCronRoute
+  '/api/tenders/source-health': typeof ApiTendersSourceHealthRoute
+  '/tenders/$tenderId': typeof AuthenticatedAppTendersTenderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/health': typeof HealthRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/_app/capabilities': typeof AuthenticatedAppCapabilitiesRoute
   '/_authenticated/_app/companies': typeof AuthenticatedAppCompaniesRoute
   '/_authenticated/_app/contacts': typeof AuthenticatedAppContactsRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
   '/_authenticated/_app/import': typeof AuthenticatedAppImportRoute
   '/_authenticated/_app/members': typeof AuthenticatedAppMembersRoute
   '/_authenticated/_app/prospect': typeof AuthenticatedAppProspectRoute
+  '/_authenticated/_app/prospects': typeof AuthenticatedAppProspectsRoute
   '/_authenticated/_app/settings': typeof AuthenticatedAppSettingsRoute
+  '/_authenticated/_app/tenders': typeof AuthenticatedAppTendersRouteWithChildren
+  '/api/tenders/cron': typeof ApiTendersCronRoute
+  '/api/tenders/source-health': typeof ApiTendersSourceHealthRoute
+  '/_authenticated/_app/tenders/$tenderId': typeof AuthenticatedAppTendersTenderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/health'
+    | '/reset-password'
     | '/onboarding'
+    | '/capabilities'
     | '/companies'
     | '/contacts'
     | '/dashboard'
     | '/import'
     | '/members'
     | '/prospect'
+    | '/prospects'
     | '/settings'
+    | '/tenders'
+    | '/api/tenders/cron'
+    | '/api/tenders/source-health'
+    | '/tenders/$tenderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/health'
+    | '/reset-password'
     | '/onboarding'
+    | '/capabilities'
     | '/companies'
     | '/contacts'
     | '/dashboard'
     | '/import'
     | '/members'
     | '/prospect'
+    | '/prospects'
     | '/settings'
+    | '/tenders'
+    | '/api/tenders/cron'
+    | '/api/tenders/source-health'
+    | '/tenders/$tenderId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/health'
+    | '/reset-password'
     | '/_authenticated/_app'
     | '/_authenticated/onboarding'
+    | '/_authenticated/_app/capabilities'
     | '/_authenticated/_app/companies'
     | '/_authenticated/_app/contacts'
     | '/_authenticated/_app/dashboard'
     | '/_authenticated/_app/import'
     | '/_authenticated/_app/members'
     | '/_authenticated/_app/prospect'
+    | '/_authenticated/_app/prospects'
     | '/_authenticated/_app/settings'
+    | '/_authenticated/_app/tenders'
+    | '/api/tenders/cron'
+    | '/api/tenders/source-health'
+    | '/_authenticated/_app/tenders/$tenderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  HealthRoute: typeof HealthRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiTendersCronRoute: typeof ApiTendersCronRoute
+  ApiTendersSourceHealthRoute: typeof ApiTendersSourceHealthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -195,6 +298,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/health': {
+      id: '/health'
+      path: '/health'
+      fullPath: '/health'
+      preLoaderRoute: typeof HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/_app': {
       id: '/_authenticated/_app'
       path: ''
@@ -208,6 +325,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/onboarding'
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/_app/capabilities': {
+      id: '/_authenticated/_app/capabilities'
+      path: '/capabilities'
+      fullPath: '/capabilities'
+      preLoaderRoute: typeof AuthenticatedAppCapabilitiesRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/_app/companies': {
       id: '/_authenticated/_app/companies'
@@ -251,6 +375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppProspectRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/prospects': {
+      id: '/_authenticated/_app/prospects'
+      path: '/prospects'
+      fullPath: '/prospects'
+      preLoaderRoute: typeof AuthenticatedAppProspectsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/settings': {
       id: '/_authenticated/_app/settings'
       path: '/settings'
@@ -258,27 +389,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppSettingsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/tenders': {
+      id: '/_authenticated/_app/tenders'
+      path: '/tenders'
+      fullPath: '/tenders'
+      preLoaderRoute: typeof AuthenticatedAppTendersRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/api/tenders/cron': {
+      id: '/api/tenders/cron'
+      path: '/api/tenders/cron'
+      fullPath: '/api/tenders/cron'
+      preLoaderRoute: typeof ApiTendersCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tenders/source-health': {
+      id: '/api/tenders/source-health'
+      path: '/api/tenders/source-health'
+      fullPath: '/api/tenders/source-health'
+      preLoaderRoute: typeof ApiTendersSourceHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/_app/tenders/$tenderId': {
+      id: '/_authenticated/_app/tenders/$tenderId'
+      path: '/$tenderId'
+      fullPath: '/tenders/$tenderId'
+      preLoaderRoute: typeof AuthenticatedAppTendersTenderIdRouteImport
+      parentRoute: typeof AuthenticatedAppTendersRoute
+    }
   }
 }
 
+interface AuthenticatedAppTendersRouteChildren {
+  AuthenticatedAppTendersTenderIdRoute: typeof AuthenticatedAppTendersTenderIdRoute
+}
+
+const AuthenticatedAppTendersRouteChildren: AuthenticatedAppTendersRouteChildren =
+  {
+    AuthenticatedAppTendersTenderIdRoute: AuthenticatedAppTendersTenderIdRoute,
+  }
+
+const AuthenticatedAppTendersRouteWithChildren =
+  AuthenticatedAppTendersRoute._addFileChildren(
+    AuthenticatedAppTendersRouteChildren,
+  )
+
 interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppCapabilitiesRoute: typeof AuthenticatedAppCapabilitiesRoute
   AuthenticatedAppCompaniesRoute: typeof AuthenticatedAppCompaniesRoute
   AuthenticatedAppContactsRoute: typeof AuthenticatedAppContactsRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
   AuthenticatedAppImportRoute: typeof AuthenticatedAppImportRoute
   AuthenticatedAppMembersRoute: typeof AuthenticatedAppMembersRoute
   AuthenticatedAppProspectRoute: typeof AuthenticatedAppProspectRoute
+  AuthenticatedAppProspectsRoute: typeof AuthenticatedAppProspectsRoute
   AuthenticatedAppSettingsRoute: typeof AuthenticatedAppSettingsRoute
+  AuthenticatedAppTendersRoute: typeof AuthenticatedAppTendersRouteWithChildren
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppCapabilitiesRoute: AuthenticatedAppCapabilitiesRoute,
   AuthenticatedAppCompaniesRoute: AuthenticatedAppCompaniesRoute,
   AuthenticatedAppContactsRoute: AuthenticatedAppContactsRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
   AuthenticatedAppImportRoute: AuthenticatedAppImportRoute,
   AuthenticatedAppMembersRoute: AuthenticatedAppMembersRoute,
   AuthenticatedAppProspectRoute: AuthenticatedAppProspectRoute,
+  AuthenticatedAppProspectsRoute: AuthenticatedAppProspectsRoute,
   AuthenticatedAppSettingsRoute: AuthenticatedAppSettingsRoute,
+  AuthenticatedAppTendersRoute: AuthenticatedAppTendersRouteWithChildren,
 }
 
 const AuthenticatedAppRouteWithChildren =
@@ -301,6 +480,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  HealthRoute: HealthRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  ApiTendersCronRoute: ApiTendersCronRoute,
+  ApiTendersSourceHealthRoute: ApiTendersSourceHealthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

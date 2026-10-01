@@ -1,4 +1,4 @@
-import { createClient, type RedisClientType } from "redis";
+import { createRedisConnection } from "./redis.server";
 import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 
 const STATE_KEY = process.env["STATE_KEY"] || "spa-intelligence:state:v1";
@@ -119,8 +119,6 @@ export type DbResult = {
   count: number | null;
 };
 
-let client: RedisClientType | null = null;
-let connectPromise: Promise<RedisClientType> | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
 
 function emptyState(): State {
@@ -137,20 +135,7 @@ function emptyState(): State {
   };
 }
 
-async function redis(): Promise<RedisClientType> {
-  if (client?.isOpen) return client;
-  if (!connectPromise) {
-    const url = process.env["REDIS_URL"];
-    if (!url) throw new Error("REDIS_URL is not configured.");
-    const next = createClient({ url });
-    next.on("error", (error) => console.error("[SPA Intelligence datastore]", error));
-    connectPromise = next.connect().then(() => {
-      client = next as RedisClientType;
-      return client;
-    });
-  }
-  return connectPromise;
-}
+const redis = createRedisConnection("auth");
 
 async function readState(): Promise<State> {
   const r = await redis();

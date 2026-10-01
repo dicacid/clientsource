@@ -1,27 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createClient, type RedisClientType } from "redis";
+import { createRedisConnection } from "./redis.server";
 import { resetPasswordForUser, userIdByEmail } from "./state.server";
 
 const RESET_PREFIX = "spa-intelligence:password-reset:";
 const RESET_TTL_SECONDS = 60 * 30;
 
-let client: RedisClientType | null = null;
-let connectPromise: Promise<RedisClientType> | null = null;
 
-async function redis(): Promise<RedisClientType> {
-  if (client?.isOpen) return client;
-  if (!connectPromise) {
-    const url = process.env["REDIS_URL"];
-    if (!url) throw new Error("REDIS_URL is not configured.");
-    const next = createClient({ url });
-    next.on("error", (error) => console.error("[SPA Intelligence password reset]", error));
-    connectPromise = next.connect().then(() => {
-      client = next as RedisClientType;
-      return client;
-    });
-  }
-  return connectPromise;
-}
+const redis = createRedisConnection("password reset");
 
 function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");

@@ -1,5 +1,7 @@
-import { createClient, type RedisClientType } from "redis";
+import { createRedisConnection } from "../../integrations/render/redis.server";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { supportsResearchChat, assertResearchModel } from "./model-compatibility";
+import { validateOpenRouterKey } from "./openrouter-key.server";
 
 const AI_PREFIX = "spa-intelligence:ai:v1:";
 const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
@@ -11,23 +13,8 @@ type Stored = {
   updatedAt?: string;
 };
 
-let redisClient: RedisClientType | null = null;
-let redisPromise: Promise<RedisClientType> | null = null;
 
-async function redis() {
-  if (redisClient?.isOpen) return redisClient;
-  if (!redisPromise) {
-    const url = process.env["REDIS_URL"];
-    if (!url) throw new Error("REDIS_URL is not configured.");
-    const next = createClient({ url });
-    next.on("error", (error) => console.error("[SPA Intelligence AI settings]", error));
-    redisPromise = next.connect().then(() => {
-      redisClient = next as RedisClientType;
-      return redisClient;
-    });
-  }
-  return redisPromise;
-}
+const redis = createRedisConnection("AI settings");
 
 function cryptoKey() {
   const secret = process.env["SPA_ENCRYPTION_KEY"];
@@ -76,6 +63,7 @@ export type OpenRouterModel = {
   promptPrice: string | null;
   completionPrice: string | null;
   supportedParameters: string[];
+  supportedEndpoints: string[];
 };
 
 export async function fetchModelCatalog(apiKey?: string): Promise<OpenRouterModel[]> {
@@ -98,13 +86,14 @@ export async function fetchModelCatalog(apiKey?: string): Promise<OpenRouterMode
     promptPrice: m.pricing?.prompt != null ? String(m.pricing.prompt) : null,
     completionPrice: m.pricing?.completion != null ? String(m.pricing.completion) : null,
     supportedParameters: Array.isArray(m.supported_parameters) ? m.supported_parameters.map(String) : [],
-  })).filter((m) => m.id);
+    supportedEndpoints: Array.isArray(m.supported_endpoints) ? m.supported_endpoints.map(String) : [],
+  })).filter((m) => m.id && supportsResearchChat(m));
 }
 
 export async function saveOpenRouterKey(orgId: string, apiKey: string) {
   const key = apiKey.trim();
   if (!key || key.length < 20) throw new Error("Enter a valid OpenRouter API key.");
-  await fetchModelCatalog(key);
+  await validateOpenRouterKey(key);
   const current = await readStored(orgId);
   await writeStored(orgId, {
     ...current,
@@ -122,6 +111,7 @@ export async function disconnectOpenRouter(orgId: string) {
 }
 
 export async function saveDefaultModel(orgId: string, model: string) {
+  assertResearchModel(model);
   const models = await fetchModelCatalog();
   if (!models.some((m) => m.id === model)) throw new Error("That model is not in the current OpenRouter catalogue.");
   const current = await readStored(orgId);
@@ -144,5 +134,6 @@ export async function getAiRuntime(orgId: string) {
   const envKey = process.env["OPENROUTER_API_KEY"];
   const apiKey = current.keyCipher ? decrypt(current.keyCipher) : envKey;
   if (!apiKey) throw new Error("OpenRouter is not connected. Open AI & Models, add your OpenRouter key, then retry.");
+  assertResearchModel(current.model || DEFAULT_MODEL);
   return { apiKey, model: current.model || DEFAULT_MODEL, keySource: current.keyCipher ? "workspace" as const : "environment" as const };
 }

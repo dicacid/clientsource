@@ -14,7 +14,8 @@ function privateAddress(address: string): boolean {
   }
   const parts = ip.split(".").map(Number);
   if (parts.length !== 4 || parts.some((x) => !Number.isInteger(x) || x < 0 || x > 255)) return true;
-  const [a, b] = parts;
+  const a = parts[0]!;
+  const b = parts[1]!;
   return (
     a === 0 ||
     a === 10 ||

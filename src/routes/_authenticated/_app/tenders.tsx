@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Clock3, ExternalLink, FileSearch, Filter, RefreshCw, Search, ShieldAlert,
 } from "lucide-react";
@@ -55,7 +55,8 @@ function ScanProgress({ run }: { run: TenderScanRun | null }) {
   if (!run) return null;
   const stages = ["Starting", "Checking sources", "Retrieving opportunities", "Verifying", "Deduplicating", "Analysing relevance", "Saving", "Complete"];
   const active = Math.max(0, stages.indexOf(run.stage));
-  const percent = Math.round(((active + (run.stage === "Complete" ? 1 : 0.35)) / stages.length) * 100);
+  const completedSteps = run.stage === "Complete" ? stages.length : active;
+  const percent = Math.round((completedSteps / stages.length) * 100);
   return (
     <div className="border border-primary/25 bg-primary/5 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -65,13 +66,13 @@ function ScanProgress({ run }: { run: TenderScanRun | null }) {
           </div>
           <div className="mt-1 text-sm font-medium">{run.stage}</div>
         </div>
-        <div className="font-mono text-xs text-muted-foreground">{Math.min(100, percent)}%</div>
+        <div className="font-mono text-xs text-muted-foreground">Step {active + 1} of {stages.length}</div>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden bg-border">
         <div className="h-full bg-primary transition-all duration-300" style={{ width: `${Math.min(100, percent)}%` }} />
       </div>
       <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-        <div>Sources: {run.sourceSuccesses}/{run.sourcesAttempted || "—"} succeeded</div>
+        <div>Sources checked: {run.sourceAttempts.length}/{run.sourcesTotal ?? run.sourcesAttempted}, {run.sourceSuccesses} succeeded</div>
         <div>Discovered: {run.opportunitiesDiscovered}</div>
         <div>New / updated: {run.newTenders} / {run.updatedTenders}</div>
         <div>AI enrichments: {run.aiEnrichments}</div>
@@ -115,9 +116,11 @@ function TenderIntelligence() {
   const [records, setRecords] = useState<TenderRecord[]>([]);
   const [audits, setAudits] = useState<TenderScanRun[]>([]);
   const [scan, setScan] = useState<TenderScanRun | null>(null);
-  const [running, setRunning] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
+  const running = starting || scan?.state === "running";
 
   const [query, setQuery] = useState("");
   const [business, setBusiness] = useState("all");
@@ -130,33 +133,49 @@ function TenderIntelligence() {
   const [closing, setClosing] = useState("all");
   const [discoveredAfter, setDiscoveredAfter] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     const [rows, history, current] = await Promise.all([list(), getAudits(), getScan()]);
     setRecords(rows as TenderRecord[]);
     setAudits(history as TenderScanRun[]);
     setScan(current as TenderScanRun | null);
-  }
+  }, [list, getAudits, getScan]);
 
   useEffect(() => {
     void load().catch((err) => setError(err instanceof Error ? err.message : String(err))).finally(() => setLoading(false));
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    let stopped = false;
+    let timer: number;
+    const poll = async () => {
+      try {
+        const current = await getScan() as TenderScanRun | null;
+        if (stopped) return;
+        setScan(current);
+        setPollError(null);
+        if (current?.state !== "running" && scan?.state === "running") await load();
+      } catch {
+        if (!stopped) setPollError("Progress could not be refreshed. Retrying automatically.");
+      } finally {
+        if (!stopped) timer = window.setTimeout(poll, scan?.state === "running" ? 1500 : 15000);
+      }
+    };
+    timer = window.setTimeout(poll, scan?.state === "running" ? 1500 : 15000);
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [getScan, load, scan?.state, scan?.id]);
 
   async function runScan() {
     if (running) return;
-    setRunning(true);
+    setStarting(true);
     setError(null);
-    const poll = window.setInterval(() => {
-      void getScan().then((current) => setScan(current as TenderScanRun | null)).catch(() => undefined);
-    }, 800);
     try {
-      const completed = await scanNow();
-      setScan(completed as TenderScanRun);
-      await load();
+      const current = await scanNow();
+      setScan(current as TenderScanRun);
+      if (current.state !== "running") await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      window.clearInterval(poll);
-      setRunning(false);
+      setStarting(false);
     }
   }
 
@@ -214,8 +233,9 @@ function TenderIntelligence() {
         </Button>
       </header>
 
-      {(running || scan?.state === "running") && <div className="mb-5"><ScanProgress run={scan} /></div>}
-      {!running && scan && <div className="mb-5"><ScanProgress run={scan} /></div>}
+      {scan && <div className="mb-5"><ScanProgress run={scan} /></div>}
+      {running && <p className="mb-4 text-xs text-muted-foreground">The server is running this scan. You can leave this page and return to its saved progress.</p>}
+      {pollError && <p role="status" className="mb-4 text-xs text-amber-300">{pollError}</p>}
       {error && <div className="mb-5 border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">

@@ -32,6 +32,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-surface: var(--input-surface);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
   --color-chart-1: var(--chart-1);
@@ -69,7 +70,8 @@
   --destructive: oklch(0.62 0.22 27);
   --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(0.35 0.01 260 / 55%);
-  --input: oklch(0.38 0.01 260 / 70%);
+  --input: oklch(0.48 0.012 260);
+  --input-surface: oklch(0.22 0.009 260);
   --ring: oklch(0.72 0.19 51 / 70%);
   --chart-1: oklch(0.72 0.19 51);
   --chart-2: oklch(0.7 0.12 200);
@@ -106,6 +108,7 @@
   --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(0.84 0.008 260);
   --input: oklch(0.78 0.01 260);
+  --input-surface: oklch(1 0 0);
   --ring: oklch(0.62 0.2 48 / 55%);
   --sidebar: oklch(0.21 0.012 260);
   --sidebar-foreground: oklch(0.95 0.004 80);
@@ -125,6 +128,17 @@
     font-feature-settings: "ss01" 1, "cv02" 1;
   }
   ::selection { background: oklch(0.72 0.19 51 / 35%); }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, select {
+    color: var(--foreground);
+    background-color: var(--input-surface);
+    font-size: 1rem;
+    border-color: var(--input);
+  }
+  input::placeholder, textarea::placeholder { color: var(--muted-foreground); }
+  input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 
 @media print {

@@ -169,7 +169,7 @@ function SettingsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Live OpenRouter model catalogue</h2>
-                <p className="mt-1 text-xs text-muted-foreground">{catalogBusy ? "Loading current catalogue…" : `${models.length} models returned by OpenRouter`}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{catalogBusy ? "Loading current catalogue…" : `${models.length} compatible chat models from OpenRouter`}</p>
               </div>
               <Button variant="outline" size="sm" onClick={refresh} disabled={catalogBusy}>Refresh catalogue</Button>
             </div>

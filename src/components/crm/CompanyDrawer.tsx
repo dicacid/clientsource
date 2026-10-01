@@ -41,7 +41,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
       if (c.error) throw c.error;
       if (contacts.error) throw contacts.error;
       if (acts.error) throw acts.error;
-      const authorIds = [...new Set(acts.data.map((a) => a.created_by))];
+      const authorIds = [...new Set(acts.data.map((a: any) => a.created_by))];
       const names: Record<string, string> = {};
       if (authorIds.length) {
         const { data: profs } = await renderDb.from("profiles").select("id, full_name").in("id", authorIds);
@@ -85,7 +85,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
   }
 
   const d = q.data;
-  const contactName = (id: string | null) => d?.contacts.find((c) => c.id === id)?.full_name;
+  const contactName = (id: string | null) => d?.contacts.find((c: any) => c.id === id)?.full_name;
 
   return (
     <Sheet open={!!companyId} onOpenChange={(o) => !o && onClose()}>
@@ -124,7 +124,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
                 <p className="text-sm text-muted-foreground">No contacts yet.</p>
               ) : (
                 <ul className="divide-y rounded-md border">
-                  {d.contacts.map((c) => (
+                  {d.contacts.map((c: any) => (
                     <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                       <div className="min-w-0">
                         <div className="truncate font-medium">{c.full_name}</div>
@@ -148,7 +148,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NO_CONTACT}>No specific contact</SelectItem>
-                      {d.contacts.map((c) => (
+                      {d.contacts.map((c: any) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.full_name}
                         </SelectItem>
@@ -169,7 +169,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
                 <p className="text-sm text-muted-foreground">No activity yet.</p>
               ) : (
                 <ol className="space-y-4 border-l pl-4">
-                  {d.activities.map((a) => (
+                  {d.activities.map((a: any) => (
                     <li key={a.id} className="relative">
                       <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-primary" />
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

@@ -189,6 +189,7 @@ export const renderDb = {
     async signInWithPassword({ email, password }: { email: string; password: string }) {
       try {
         const data = await authRequest({ data: { action: "signin", email, password } });
+        if (!("access_token" in data) || typeof data.access_token !== "string" || !("user" in data)) throw new Error("Sign-in did not return a session.");
         setToken(data.access_token);
         emit("SIGNED_IN");
         return { data: { user: data.user, session: { access_token: data.access_token } }, error: null };
@@ -238,7 +239,7 @@ export const renderDb = {
 
     onAuthStateChange(listener: Listener) {
       listeners.add(listener);
-      return { data: { subscription: { unsubscribe: () => listeners.delete(listener) } } };
+      return { data: { subscription: { unsubscribe: () => { listeners.delete(listener); } } } };
     },
   },
 

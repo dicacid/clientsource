@@ -52,8 +52,8 @@ export type TenderSourceReference = {
 export type TenderChange = {
   at: string;
   field: string;
-  before: unknown;
-  after: unknown;
+  before: string | string[] | null;
+  after: string | string[] | null;
   sourceName: string;
 };
 
@@ -166,48 +166,49 @@ export function secondaryTenderKey(raw: Pick<RawTender, "issuer" | "tenderTitle"
 export function parseAustralianLocalDate(input: string | null, timeZone = "Australia/Melbourne"): string | null {
   if (!input) return null;
   const value = input.trim().replace(/([ap])\.m\./gi, "$1m");
-  const wordMatch = value.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)$/i);
-  const compactMatch = value.match(/^(\d{1,2})-([A-Za-z]{3,9})-(\d{4})\s+(\d{1,2}):(\d{2})(?:\s*(am|pm))?$/i);
-  const numericMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-?\s*(\d{1,2}):(\d{2})\s*(am|pm))?$/i);
-  const m = wordMatch ?? compactMatch ?? numericMatch;
-  if (!m) {
+  if (/(?:[zZ]|[+-]\d{2}:?\d{2}|GMT|UTC)\s*$/i.test(value)) {
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
   }
-  const day = Number(m[1]);
-  const month = wordMatch || compactMatch ? MONTHS[m[2]!.toLowerCase()] : Number(m[2]) - 1;
-  const year = Number(m[3]);
-  if (month == null || !day || !year) return null;
+  const wordMatch = value.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*(am|pm)?)?$/i);
+  const compactMatch = value.match(/^(\d{1,2})-([A-Za-z]{3,9})-(\d{4})\s+(\d{1,2}):(\d{2})(?:\s*(am|pm))?$/i);
+  const numericMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-?\s*(\d{1,2}):(\d{2})\s*(am|pm)?)?$/i);
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  const m = wordMatch ?? compactMatch ?? numericMatch ?? isoMatch;
+  if (!m) return null;
+  const day = Number(isoMatch ? m[3] : m[1]);
+  const month = isoMatch ? Number(m[2]) - 1 : wordMatch || compactMatch ? MONTHS[m[2]!.toLowerCase()] : Number(m[2]) - 1;
+  const year = Number(isoMatch ? m[1] : m[3]);
+  if (month == null || month < 0 || month > 11 || day < 1 || year < 1900) return null;
+  const calendar = new Date(Date.UTC(year, month, day));
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month || calendar.getUTCDate() !== day) return null;
   let hour = Number(m[4] ?? 0);
   const minute = Number(m[5] ?? 0);
-  const meridiem = m[6] ? String(m[6]).toLowerCase() : null;
+  const second = isoMatch ? Number(m[6] ?? 0) : 0;
+  const meridiem = !isoMatch && m[6] ? String(m[6]).toLowerCase() : null;
   if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
     if (hour === 12) hour = 0;
     if (meridiem === "pm") hour += 12;
   }
-  if (hour > 23 || minute > 59) return null;
+  if (hour > 23 || minute > 59 || second > 59) return null;
 
-  const targetWallClock = Date.UTC(year, month, day, hour, minute, 0);
+  const targetWallClock = Date.UTC(year, month, day, hour, minute, second);
   let guess = targetWallClock;
-  const formatter = new Intl.DateTimeFormat("en-AU", {
-    timeZone,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
-  });
-
-  for (let i = 0; i < 3; i++) {
-    const parts = Object.fromEntries(
-      formatter.formatToParts(new Date(guess))
-        .filter((part) => part.type !== "literal")
-        .map((part) => [part.type, part.value]),
-    );
-    const represented = Date.UTC(
-      Number(parts["year"]), Number(parts["month"]) - 1, Number(parts["day"]),
-      Number(parts["hour"]), Number(parts["minute"]), Number(parts["second"]),
-    );
-    guess += targetWallClock - represented;
-  }
-  return new Date(guess).toISOString();
+  try {
+    const formatter = new Intl.DateTimeFormat("en-AU", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    });
+    for (let i = 0; i < 4; i++) {
+      const parts = Object.fromEntries(formatter.formatToParts(new Date(guess)).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+      const represented = Date.UTC(Number(parts["year"]), Number(parts["month"]) - 1, Number(parts["day"]), Number(parts["hour"]), Number(parts["minute"]), Number(parts["second"]));
+      if (represented === targetWallClock) return new Date(guess).toISOString();
+      guess += targetWallClock - represented;
+    }
+  } catch { /* Invalid timezones stay unknown. */ }
+  // Local times that do not exist during the daylight-saving jump stay unknown.
+  return null;
 }
 
 export type ClosingBand = "within_48h" | "within_7d" | "within_14d" | "later" | "unknown" | "expired";

@@ -48,7 +48,7 @@ export const getTenderScanState = createServerFn({ method: "GET" })
 
 export const startTenderScan = createServerFn({ method: "POST" })
   .middleware([requireRenderMember])
-  .handler(async ({ context }) => runTenderScan(context.organizationId));
+  .handler(async ({ context }) => runTenderScan(context.organizationId, true));
 
 export const updateTenderWorkflow = createServerFn({ method: "POST" })
   .middleware([requireRenderMember])

@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "node --experimental-transform-types --test tests/*.test.mjs",
     "tenders:scan": "node scripts/run-tender-cron.mjs"

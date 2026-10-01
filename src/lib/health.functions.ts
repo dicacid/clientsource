@@ -33,7 +33,7 @@ export const healthCheck = createServerFn({ method: "GET" }).handler(async () =>
   const datastore = await datastoreHealth();
   const tenderCore = tenderCoreHealth();
   return {
-    ok: tenderCore.ok,
+    ok: datastore.ok && tenderCore.ok,
     service: "spa-intelligence",
     hosting: "render",
     datastore,
