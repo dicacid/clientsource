@@ -16,6 +16,10 @@ export function friendlyError(err: unknown): string {
   if (code === "23514") return "Some values are not allowed. Check the form.";
   if (msg.includes("WORKSPACE_EXISTS")) return "A workspace already exists. Ask the owner to invite you.";
   if (msg.includes("ALREADY_MEMBER")) return "You already belong to the workspace.";
+  if (msg.includes("INVITE_REQUIRED")) return "A valid invitation is required to create an account for this workspace.";
+  if (msg.includes("INVITE_EXPIRED")) return "This invitation has expired. Ask the workspace owner to create a new one.";
+  if (msg.includes("INVITE_INVALID")) return "This invitation link is invalid. Ask the workspace owner to create a new one.";
+  if (msg.includes("INVALID_EMAIL")) return "Enter a valid email address.";
   if (msg.includes("EMAIL_NOT_CONFIRMED")) return "Confirm your email, then sign in again.";
   if (msg.includes("NOT_OWNER")) return "Only owners can do that.";
   if (msg.includes("NOT_ADMIN")) return "Only owners and admins can do that.";
