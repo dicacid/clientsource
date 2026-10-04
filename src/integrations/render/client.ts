@@ -37,6 +37,11 @@ function err(error: unknown) {
   };
 }
 
+export function isAuthFailure(error: unknown): boolean {
+  const message = (error as { message?: string } | null | undefined)?.message ?? String(error ?? "");
+  return /Unauthorized:|session expired|sign in again/i.test(message);
+}
+
 type Filter = {
   op: "eq" | "ilike" | "lt" | "gte" | "lte" | "in" | "not";
   column: string;
@@ -171,24 +176,36 @@ export const renderDb = {
       email,
       password,
       options,
+      inviteToken,
     }: {
       email: string;
       password: string;
       options?: { data?: { full_name?: string } };
+      inviteToken?: string;
     }) {
       try {
         const data = await authRequest({
-          data: { action: "signup", email, password, fullName: options?.data?.full_name ?? "" },
+          data: { action: "signup", email, password, fullName: options?.data?.full_name ?? "", inviteToken },
         });
-        return { data, error: null };
+        setToken(data.access_token);
+        emit("SIGNED_IN");
+        return { data: { user: data.user, session: { access_token: data.access_token } }, error: null };
       } catch (error) {
         return { data: null, error: err(error) };
       }
     },
 
-    async signInWithPassword({ email, password }: { email: string; password: string }) {
+    async signInWithPassword({
+      email,
+      password,
+      inviteToken,
+    }: {
+      email: string;
+      password: string;
+      inviteToken?: string;
+    }) {
       try {
-        const data = await authRequest({ data: { action: "signin", email, password } });
+        const data = await authRequest({ data: { action: "signin", email, password, inviteToken } });
         setToken(data.access_token);
         emit("SIGNED_IN");
         return { data: { user: data.user, session: { access_token: data.access_token } }, error: null };
@@ -209,7 +226,7 @@ export const renderDb = {
         const data = await currentUserRequest();
         return { data, error: null };
       } catch (error) {
-        setToken(null);
+        if (isAuthFailure(error)) setToken(null);
         return { data: { user: null }, error: err(error) };
       }
     },

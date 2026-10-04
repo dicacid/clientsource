@@ -9,19 +9,21 @@ const authSchema = z.discriminatedUnion("action", [
     email: z.string().email(),
     password: z.string().min(8),
     fullName: z.string().max(120).default(""),
+    inviteToken: z.string().min(20).max(512).optional(),
   }),
   z.object({
     action: z.literal("signin"),
     email: z.string().email(),
     password: z.string().min(1),
+    inviteToken: z.string().min(20).max(512).optional(),
   }),
 ]);
 
 export const authRequest = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => authSchema.parse(data))
   .handler(async ({ data }) => {
-    if (data.action === "signup") return signUp(data.email, data.password, data.fullName);
-    return signIn(data.email, data.password);
+    if (data.action === "signup") return signUp(data.email, data.password, data.fullName, data.inviteToken);
+    return signIn(data.email, data.password, data.inviteToken);
   });
 
 export const currentUserRequest = createServerFn({ method: "GET" })

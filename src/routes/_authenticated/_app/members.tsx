@@ -6,6 +6,7 @@ import { Trash2 } from "lucide-react";
 import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EMAIL_RE, label, type Role } from "@/lib/constants";
@@ -33,13 +34,14 @@ function Members() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<string>("member");
   const [busy, setBusy] = useState(false);
+  const [inviteLink, setInviteLink] = useState("");
 
   const q = useQuery({
     queryKey: ["members", ws.organizationId],
     queryFn: async () => {
       const [m, inv] = await Promise.all([
         renderDb.from("organization_members").select("user_id, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
-        renderDb.from("pending_invites").select("id, email, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
+        renderDb.from("pending_invites").select("id, email, role, created_at, expires_at").eq("organization_id", ws.organizationId).order("created_at"),
       ]);
       if (m.error) throw m.error;
       if (inv.error) throw inv.error;
@@ -58,17 +60,27 @@ function Members() {
     e.preventDefault();
     if (!EMAIL_RE.test(email.trim())) return toast.error("Enter a valid email.");
     setBusy(true);
-    const { error } = await renderDb.from("pending_invites").insert({
-      organization_id: ws.organizationId,
+    const { data, error } = await renderDb.rpc("create_invite", {
       email: email.trim().toLowerCase(),
       role: isOwner ? role : "member",
-      invited_by: ws.userId,
     });
     setBusy(false);
     if (error) return toast.error(friendlyError(error));
-    toast.success(`Invite saved for ${email.trim()}`);
+    const url = `${window.location.origin}/auth?invite=${encodeURIComponent(data.token)}&email=${encodeURIComponent(data.email)}`;
+    setInviteLink(url);
+    toast.success(`Secure invite created for ${data.email}`);
     setEmail("");
     refresh();
+  }
+
+  async function copyInvite() {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      toast.success("Invite link copied");
+    } catch {
+      toast.error("Copy failed. Select the link and copy it manually.");
+    }
   }
 
   async function removeInvite(id: string) {
@@ -108,7 +120,7 @@ function Members() {
           <h2 className="text-sm font-semibold">Invite someone</h2>
           <Alert className="my-3">
             <AlertDescription>
-              No email is sent. Tell the person to sign up with this exact email address. They'll join the workspace on their first sign-in.
+              Create a one-time invitation link and send it securely to the person. New invite links expire after seven days.
             </AlertDescription>
           </Alert>
           <form onSubmit={invite} className="flex flex-wrap gap-2">
@@ -122,6 +134,16 @@ function Members() {
               {busy ? "Saving…" : "Add invite"}
             </Button>
           </form>
+          {inviteLink && (
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="invite-link">Invitation link</Label>
+              <div className="flex gap-2">
+                <Input id="invite-link" value={inviteLink} readOnly className="font-mono text-xs" />
+                <Button type="button" variant="outline" onClick={copyInvite}>Copy</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">This link contains the one-time invite token. It is only shown here when created.</p>
+            </div>
+          )}
         </section>
       )}
 
@@ -184,7 +206,9 @@ function Members() {
                   <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                     <span className="font-mono">{i.email}</span>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs uppercase text-muted-foreground">{i.role}</span>
+                      <span className="font-mono text-xs uppercase text-muted-foreground">
+                        {i.role}{i.expires_at ? ` · expires ${new Date(i.expires_at).toLocaleDateString()}` : " · legacy invite"}
+                      </span>
                       {(i.role === "member" ? isAdmin : isOwner) && (
                         <ConfirmDelete
                           title="Remove this invite?"
