@@ -1,5 +1,5 @@
 import { createClient, type RedisClientType } from "redis";
-import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 
 const STATE_KEY = "clientsource:state:v1";
 
@@ -8,7 +8,7 @@ type User = { id: string; email: string; password_hash: string; created_at: stri
 type Profile = { id: string; full_name: string | null; created_at: string };
 type Organization = { id: string; name: string; created_at: string };
 type OrganizationMember = { organization_id: string; user_id: string; role: Role; created_at: string };
-type PendingInvite = { id: string; organization_id: string; email: string; role: "admin" | "member"; invited_by: string; created_at: string };
+type PendingInvite = { id: string; organization_id: string; email: string; role: "admin" | "member"; invited_by: string; created_at: string; token_hash?: string | null; expires_at?: string | null };
 type Company = {
   id: string;
   organization_id: string;
@@ -217,6 +217,40 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function hashInviteToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function inviteExpired(invite: PendingInvite): boolean {
+  if (!invite.expires_at) return false;
+  const expires = Date.parse(invite.expires_at);
+  return Number.isFinite(expires) && expires <= Date.now();
+}
+
+function inviteTokenMatches(invite: PendingInvite, token?: string): boolean {
+  if (!invite.token_hash) return true;
+  if (!token || inviteExpired(invite)) return false;
+  const actual = Buffer.from(hashInviteToken(token), "hex");
+  const expected = Buffer.from(invite.token_hash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function bootstrapAdminInvite(state: State, email: string, token?: string) {
+  const configuredEmail = normalizeEmail(process.env["BOOTSTRAP_ADMIN_EMAIL"] ?? "");
+  const configuredHash = (process.env["BOOTSTRAP_ADMIN_TOKEN_SHA256"] ?? "").trim().toLowerCase();
+  const expiresAt = process.env["BOOTSTRAP_ADMIN_EXPIRES_AT"]?.trim() ?? "";
+  if (!configuredEmail || configuredEmail !== email || !configuredHash || !token) return null;
+  if (expiresAt) {
+    const expires = Date.parse(expiresAt);
+    if (Number.isFinite(expires) && expires <= Date.now()) return null;
+  }
+  const actual = Buffer.from(hashInviteToken(token), "hex");
+  const expected = Buffer.from(configuredHash, "hex");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+  const organization = state.organizations[0];
+  return organization ? { organization_id: organization.id, role: "admin" as const } : null;
+}
+
 function normalizeWebsite(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   let value = raw.trim().toLowerCase();
@@ -283,24 +317,94 @@ function publicUser(user: User) {
   };
 }
 
-export async function signUp(email: string, password: string, fullName: string) {
+export async function signUp(email: string, password: string, fullName: string, inviteToken?: string) {
   const normalized = normalizeEmail(email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new Error("Enter a valid email address.");
   if (password.length < 8) throw new Error("Password must be at least 8 characters.");
-  return mutateState((state) => {
+  const user = await mutateState((state) => {
     if (state.users.some((u) => u.email === normalized)) throw new Error("An account with that email already exists.");
+
+    const organization = state.organizations[0] ?? null;
+    const invite = state.pending_invites.find((i) => i.email === normalized);
+    const bootstrap = bootstrapAdminInvite(state, normalized, inviteToken);
+
+    if (organization && !invite && !bootstrap) throw new Error("INVITE_REQUIRED");
+    if (invite?.token_hash) {
+      if (inviteExpired(invite)) throw new Error("INVITE_EXPIRED");
+      if (!inviteTokenMatches(invite, inviteToken)) throw new Error("INVITE_INVALID");
+    }
+
     const created_at = new Date().toISOString();
-    const user: User = { id: randomUUID(), email: normalized, password_hash: hashPassword(password), created_at };
-    state.users.push(user);
-    state.profiles.push({ id: user.id, full_name: fullName.trim() || null, created_at });
-    return { user: publicUser(user) };
+    const nextUser: User = { id: randomUUID(), email: normalized, password_hash: hashPassword(password), created_at };
+    state.users.push(nextUser);
+    state.profiles.push({ id: nextUser.id, full_name: fullName.trim() || null, created_at });
+
+    if (organization) {
+      const role: Role = bootstrap?.role ?? invite!.role;
+      state.organization_members.push({
+        organization_id: bootstrap?.organization_id ?? invite!.organization_id,
+        user_id: nextUser.id,
+        role,
+        created_at,
+      });
+      if (invite) state.pending_invites = state.pending_invites.filter((i) => i.id !== invite.id);
+    }
+
+    return nextUser;
   });
+  return { user: publicUser(user), access_token: signToken(user) };
 }
 
-export async function signIn(email: string, password: string) {
+export async function signIn(email: string, password: string, inviteToken?: string) {
+  const normalized = normalizeEmail(email);
   const state = await readState();
-  const user = state.users.find((u) => u.email === normalizeEmail(email));
+  const user = state.users.find((u) => u.email === normalized);
   if (!user || !verifyPassword(password, user.password_hash)) throw new Error("Invalid email or password.");
+
+  if (inviteToken && !memberFor(state, user.id)) {
+    await mutateState((next) => {
+      if (memberFor(next, user.id)) return;
+      const invite = next.pending_invites.find((i) => i.email === normalized);
+      const bootstrap = bootstrapAdminInvite(next, normalized, inviteToken);
+
+      if (invite?.token_hash) {
+        if (inviteExpired(invite)) throw new Error("INVITE_EXPIRED");
+        if (!inviteTokenMatches(invite, inviteToken)) throw new Error("INVITE_INVALID");
+        next.organization_members.push({
+          organization_id: invite.organization_id,
+          user_id: user.id,
+          role: invite.role,
+          created_at: new Date().toISOString(),
+        });
+        next.pending_invites = next.pending_invites.filter((i) => i.id !== invite.id);
+        return;
+      }
+
+      if (bootstrap) {
+        next.organization_members.push({
+          organization_id: bootstrap.organization_id,
+          user_id: user.id,
+          role: bootstrap.role,
+          created_at: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (invite && !invite.token_hash) {
+        next.organization_members.push({
+          organization_id: invite.organization_id,
+          user_id: user.id,
+          role: invite.role,
+          created_at: new Date().toISOString(),
+        });
+        next.pending_invites = next.pending_invites.filter((i) => i.id !== invite.id);
+        return;
+      }
+
+      throw new Error("INVITE_INVALID");
+    });
+  }
+
   return { user: publicUser(user), access_token: signToken(user) };
 }
 
@@ -514,11 +618,7 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
       throw dbError("Permission denied.", "42501");
     }
     if (table === "pending_invites") {
-      const actor = requireMembership(state, userId);
-      if (row.organization_id !== actor.organization_id || !canManageRole(actor, row.role)) throw dbError("Permission denied.", "42501");
-      row.email = normalizeEmail(row.email);
-      row.invited_by = userId;
-      if (state.pending_invites.some((i) => i.email === row.email)) throw dbError("pending_invites duplicate", "23505");
+      throw dbError("Use the create_invite action.", "42501");
     } else {
       const actor = requireMembership(state, userId);
       if (row.organization_id !== actor.organization_id) throw dbError("Permission denied.", "42501");
@@ -695,10 +795,46 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
 
       if (fn === "workspace_exists") return state.organizations.length > 0;
 
+      if (fn === "create_invite") {
+        const actor = requireMembership(state, userId);
+        const email = normalizeEmail(String(args["email"] ?? ""));
+        const role = String(args["role"] ?? "member") as "admin" | "member";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw dbError("INVALID_EMAIL");
+        if (!["admin", "member"].includes(role)) throw dbError("INVALID_ROLE");
+        if (!canManageRole(actor, role)) throw dbError("NOT_OWNER");
+
+        const existingUser = state.users.find((u) => u.email === email);
+        if (
+          existingUser &&
+          state.organization_members.some(
+            (m) => m.organization_id === actor.organization_id && m.user_id === existingUser.id,
+          )
+        ) {
+          throw dbError("ALREADY_MEMBER");
+        }
+
+        const token = randomBytes(32).toString("base64url");
+        const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+        state.pending_invites = state.pending_invites.filter(
+          (i) => !(i.organization_id === actor.organization_id && i.email === email),
+        );
+        state.pending_invites.push({
+          id: randomUUID(),
+          organization_id: actor.organization_id,
+          email,
+          role,
+          invited_by: userId,
+          created_at: new Date().toISOString(),
+          token_hash: hashInviteToken(token),
+          expires_at,
+        });
+        return { email, role, token, expires_at };
+      }
+
       if (fn === "claim_invite") {
         if (memberFor(state, userId)) return null;
         const invite = state.pending_invites.find((i) => i.email === user.email);
-        if (!invite) return null;
+        if (!invite || invite.token_hash || inviteExpired(invite)) return null;
         state.organization_members.push({
           organization_id: invite.organization_id,
           user_id: userId,
