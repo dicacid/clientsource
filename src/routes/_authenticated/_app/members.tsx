@@ -6,6 +6,7 @@ import { Trash2 } from "lucide-react";
 import { renderDb } from "@/integrations/render/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EMAIL_RE, label, type Role } from "@/lib/constants";
