@@ -68,6 +68,9 @@ function ProspectPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(ws.email);
   const [website, setWebsite] = useState("");
+  const [businessQuery, setBusinessQuery] = useState("");
+  const [industryQuery, setIndustryQuery] = useState("");
+  const [includeCompetitors, setIncludeCompetitors] = useState(true);
   const [region, setRegion] = useState<"domestic" | "international" | "both">("domestic");
   const [phase, setPhase] = useState<"idle" | "analyzing" | "discovering" | "researching" | "done">("idle");
   const [analysis, setAnalysis] = useState<{ website: string; analysis: Analysis } | null>(null);
@@ -94,6 +97,9 @@ function ProspectPage() {
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       if (s.website) setWebsite(s.website);
+      if (typeof s.businessQuery === "string") setBusinessQuery(s.businessQuery);
+      if (typeof s.industryQuery === "string") setIndustryQuery(s.industryQuery);
+      if (typeof s.includeCompetitors === "boolean") setIncludeCompetitors(s.includeCompetitors);
       if (s.region === "domestic" || s.region === "international" || s.region === "both") setRegion(s.region);
     } catch {
       /* ignore */
@@ -191,7 +197,7 @@ function ProspectPage() {
     if (!sender.name) return setError("Enter your name.");
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
     if (!normalizeWebsite(website)) return setError("Enter your website, like example.com");
-    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, region }));
+    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, businessQuery, industryQuery, includeCompetitors, region }));
     // Fresh run: drop any previous sender's analysis, prospects and drafts.
     const id = ++runId.current;
     setRows([]);
@@ -202,7 +208,7 @@ function ProspectPage() {
       if (id !== runId.current) return;
       setAnalysis(a);
       setPhase("discovering");
-      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region } });
+      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region, business_query: businessQuery.trim(), industry_query: industryQuery.trim(), include_competitors: includeCompetitors } });
       if (id !== runId.current) return;
       if (!targets.length) {
         setPhase("done");
@@ -222,7 +228,7 @@ function ProspectPage() {
     setPhase("discovering");
     try {
       const { targets } = await discover({
-        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain), region },
+        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain), region, business_query: businessQuery.trim(), industry_query: industryQuery.trim(), include_competitors: includeCompetitors },
       });
       if (!targets.length) {
         setPhase("done");
@@ -346,7 +352,7 @@ function ProspectPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Prospect finder" sub="Your website in → matching companies, their decision-maker, and a ready-to-send email out." />
+      <PageHeader title="Prospect finder" sub="Use your website plus an optional business name, industry, or both to find prospects, competitors, decision-makers and outreach." />
 
       <form onSubmit={start} className="grid gap-5 rounded-lg border bg-card p-5 md:grid-cols-2 xl:grid-cols-4">
         <div className="space-y-1.5">
@@ -362,6 +368,14 @@ function ProspectPage() {
           <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
         </div>
         <div className="space-y-1.5">
+          <Label htmlFor="p-business-query">Business or company (optional)</Label>
+          <Input id="p-business-query" value={businessQuery} onChange={(e) => setBusinessQuery(e.target.value)} placeholder="e.g. Orica, Ampcontrol" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-industry-query">Industry (optional)</Label>
+          <Input id="p-industry-query" value={industryQuery} onChange={(e) => setIndustryQuery(e.target.value)} placeholder="e.g. mining, logistics, agriculture" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+        <div className="space-y-1.5">
           <Label htmlFor="p-region">Target region</Label>
           <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
             <SelectTrigger id="p-region" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus:ring-2 focus:ring-primary/30">
@@ -374,6 +388,13 @@ function ProspectPage() {
             </SelectContent>
           </Select>
         </div>
+        <label className="flex items-start gap-3 border bg-muted/20 p-3 md:col-span-2 xl:col-span-4">
+          <input type="checkbox" checked={includeCompetitors} onChange={(e) => setIncludeCompetitors(e.target.checked)} className="mt-1 h-4 w-4" />
+          <span>
+            <span className="block text-sm font-medium">Include competitors and peer companies</span>
+            <span className="block text-xs text-muted-foreground">For a named business, include direct competitors. For an industry search, include competing operators in that market.</span>
+          </span>
+        </label>
         <div className="space-y-1.5 md:col-span-2 xl:col-span-4">
           <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
           <Textarea
@@ -391,7 +412,7 @@ function ProspectPage() {
         </div>
         <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          Find prospects
+          {businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
         </Button>
       </form>
 
