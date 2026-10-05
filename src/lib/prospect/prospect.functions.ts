@@ -213,6 +213,9 @@ export const discoverTargets = createServerFn({ method: "POST" })
         analysis: analysisSchema,
         exclude: z.array(z.string().max(200)).max(200).default([]),
         region: z.enum(["domestic", "international", "both"]).default("domestic"),
+        business_query: z.string().max(200).default(""),
+        industry_query: z.string().max(160).default(""),
+        include_competitors: z.boolean().default(true),
       })
       .parse(d),
   )
@@ -235,9 +238,26 @@ export const discoverTargets = createServerFn({ method: "POST" })
             ? "STRICT LOCATION RULE: every company MUST be based OUTSIDE Australia. NEVER include Australian companies or .au domains. Set country to each company's real country."
             : "LOCATION RULE: return a mix, roughly half based in Australia and half overseas. Set country to each company's real country (\"Australia\" for the Australian ones).";
       const an = data.analysis;
+      const businessQuery = data.business_query.trim();
+      const industryQuery = data.industry_query.trim();
+      const requestedSearch = Boolean(businessQuery || industryQuery);
+      const searchIntent = [
+        businessQuery ? `Requested business/company: ${businessQuery}` : "",
+        industryQuery ? `Requested industry: ${industryQuery}` : "",
+        data.include_competitors
+          ? "Competitor mode: ON. Include direct competitors or close peer companies relevant to the requested business/industry."
+          : "Competitor mode: OFF. Do not add competitors merely because they compete with a named business.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const modeInstruction = requestedSearch
+        ? `The operator has supplied explicit market-search intent below. Follow it before generic prospect discovery. If a business/company is named, resolve that real company and its real primary domain; include that exact business first when it exists and satisfies the location rule, even if it is large. If an industry is named, constrain discovery to that industry or clearly adjacent operators. When competitor mode is ON, add real direct competitors or close peers and explain the competitive relationship in why_fit. Never invent a company or domain.`
+        : "No explicit company or industry was supplied. Discover strong prospects from the sender product analysis as usual.";
+
       const res = await aiJsonForOrg<{ companies: Target[] }>(context.organizationId,
-        `You are a B2B prospecting researcher. Propose REAL, currently operating small and mid-sized companies (not Fortune 500 giants) that would clearly benefit from the described product. Derive the target market ONLY from the product analysis given (its ideal customers, industries and buyer titles); do not assume any other vertical. Only include companies you are confident exist, with their real primary website domain. ${locationRule}`,
-        `Product: ${an.business_name}: ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nIdeal customers: ${an.ideal_customers.join("; ")}\nTarget industries: ${an.target_industries.join(", ")}\nBuyer titles: ${an.target_titles.join(", ")}\nPain points: ${an.pain_points.join("; ")}\nDifferentiators: ${an.differentiators.join("; ") || "(none)"}${feedbackHint}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence tying their business to the product).`,
+        `You are a B2B market and prospecting researcher. Propose REAL, currently operating companies with their real primary website domains. For generic prospecting, prefer small and mid-sized companies over Fortune 500 giants. For an explicitly named business, include the named company when it exists and matches the requested location, regardless of size. Derive fit from the product analysis and any explicit operator search intent. ${modeInstruction} ${locationRule}`,
+        `SEARCH INTENT:\n${searchIntent || "(none, broad prospect discovery)"}\n\nSENDER PRODUCT:\nProduct: ${an.business_name}: ${an.one_liner}\nWhat it does: ${an.what_it_does}\nValue proposition: ${an.value_proposition}\nIdeal customers: ${an.ideal_customers.join("; ")}\nTarget industries: ${an.target_industries.join(", ")}\nBuyer titles: ${an.target_titles.join(", ")}\nPain points: ${an.pain_points.join("; ")}\nDifferentiators: ${an.differentiators.join("; ") || "(none)"}${feedbackHint}\nDo NOT include these domains: ${[...skip].filter(Boolean).slice(0, 150).join(", ") || "none"}\n\nReturn JSON {"companies":[...]} with up to 16 items, each: name, domain (bare domain, no protocol), industry, country, employee_range (one of 1-10, 11-50, 51-200, 201-1000, 1000+), why_fit (one specific sentence explaining product fit and, when relevant, why it is a competitor/peer). If a business was explicitly requested, put that business first.`,
       );
       const candidates = (res.companies ?? [])
         .map((c) => ({ ...c, domain: hostOf(String(c.domain ?? "")) ?? "" }))
