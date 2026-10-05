@@ -69,9 +69,6 @@ function ProspectPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(ws.email);
   const [website, setWebsite] = useState("https://solarpoweraustralia.com.au");
-  const [businessQuery, setBusinessQuery] = useState("");
-  const [industryQuery, setIndustryQuery] = useState("");
-  const [includeCompetitors, setIncludeCompetitors] = useState(true);
   const [region, setRegion] = useState<"domestic" | "international" | "both">("domestic");
   const [phase, setPhase] = useState<"idle" | "analyzing" | "discovering" | "researching" | "done">("idle");
   const [analysis, setAnalysis] = useState<{ website: string; analysis: Analysis } | null>(null);
@@ -99,9 +96,6 @@ function ProspectPage() {
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       setWebsite("https://solarpoweraustralia.com.au");
-      if (typeof s.businessQuery === "string") setBusinessQuery(s.businessQuery);
-      if (typeof s.industryQuery === "string") setIndustryQuery(s.industryQuery);
-      if (typeof s.includeCompetitors === "boolean") setIncludeCompetitors(s.includeCompetitors);
       if (s.region === "domestic" || s.region === "international" || s.region === "both") setRegion(s.region);
     } catch {
       /* ignore */
@@ -208,7 +202,7 @@ function ProspectPage() {
     if (!sender.name) return setError("Enter your name.");
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
     if (!normalizeWebsite(website)) return setError("Enter your website, like example.com");
-    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, businessQuery, industryQuery, includeCompetitors, region }));
+    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, region }));
     // Fresh run: drop any previous sender's analysis, prospects and drafts.
     const id = ++runId.current;
     setRows([]);
@@ -244,17 +238,7 @@ function ProspectPage() {
       }
 
       setPhase("discovering");
-      const { targets } = await discover({
-        data: {
-          website: a.website,
-          analysis: a.analysis,
-          exclude: [],
-          region,
-          business_query: businessQuery.trim(),
-          industry_query: industryQuery.trim(),
-          include_competitors: includeCompetitors,
-        },
-      });
+      const { targets } = await discover({ data: { website: a.website, analysis: a.analysis, exclude: [], region } });
       if (id !== runId.current) return;
       if (!targets.length) {
         setPhase("done");
@@ -274,15 +258,7 @@ function ProspectPage() {
     setPhase("discovering");
     try {
       const { targets } = await discover({
-        data: {
-          website: analysis.website,
-          analysis: analysis.analysis,
-          exclude: rows.map((r) => r.domain),
-          region,
-          business_query: businessQuery.trim(),
-          industry_query: industryQuery.trim(),
-          include_competitors: includeCompetitors,
-        },
+        data: { website: analysis.website, analysis: analysis.analysis, exclude: rows.map((r) => r.domain), region },
       });
       if (!targets.length) {
         setPhase("done");
@@ -406,7 +382,7 @@ function ProspectPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="SPA Prospect Intelligence" sub="Search by business, industry or both. Discover verified prospects, competitors, decision-makers, evidence and outreach." />
+      <PageHeader title="SPA Prospect Intelligence" sub="Solar Power Australia in, verified matching companies, decision-makers, evidence and outreach out." />
 
       {prefillTarget && (
         <div className="mb-4 border border-primary/30 bg-primary/5 p-4">
@@ -460,46 +436,6 @@ function ProspectPage() {
           />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="p-business-query" className="text-sm font-medium">Business or company (optional)</Label>
-            <Input
-              id="p-business-query"
-              value={businessQuery}
-              onChange={(e) => setBusinessQuery(e.target.value)}
-              placeholder="e.g. Orica, WesTrac, Ampcontrol"
-              className="h-11 w-full text-base"
-            />
-            <p className="text-xs leading-5 text-muted-foreground">No website required. We resolve and verify the public domain before research.</p>
-          </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="p-industry-query" className="text-sm font-medium">Industry (optional)</Label>
-            <Input
-              id="p-industry-query"
-              value={industryQuery}
-              onChange={(e) => setIndustryQuery(e.target.value)}
-              placeholder="e.g. mining, cold storage, agriculture"
-              className="h-11 w-full text-base"
-            />
-            <p className="text-xs leading-5 text-muted-foreground">Use alone for an industry scan, or combine it with a business name to narrow the market.</p>
-          </div>
-        </div>
-
-        <label className="flex cursor-pointer items-start gap-3 border bg-muted/20 p-3">
-          <input
-            type="checkbox"
-            checked={includeCompetitors}
-            onChange={(e) => setIncludeCompetitors(e.target.checked)}
-            className="mt-1 h-4 w-4"
-          />
-          <span>
-            <span className="block text-sm font-medium">Include competitors and peer companies</span>
-            <span className="block text-xs leading-5 text-muted-foreground">
-              For a named business, identify verified direct competitors and comparable operators. For an industry search, include competing companies across that market.
-            </span>
-          </span>
-        </label>
-
         <div className="min-w-0 space-y-2 lg:max-w-xl">
           <Label htmlFor="p-region" className="text-sm font-medium">Target region</Label>
           <Select value={region} onValueChange={(v) => setRegion(v as typeof region)}>
@@ -533,7 +469,7 @@ function ProspectPage() {
         <div className="flex justify-end">
           <Button type="submit" disabled={busy} className="h-11 w-full gap-2 px-6 text-base lg:w-auto lg:min-w-48">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {prefillTarget ? "Research selected prospect" : businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
+            {prefillTarget ? "Research selected prospect" : "Find prospects"}
           </Button>
         </div>
       </form>
