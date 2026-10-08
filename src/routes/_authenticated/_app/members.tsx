@@ -37,7 +37,7 @@ function Members() {
   const [inviteLink, setInviteLink] = useState("");
 
   const q = useQuery({
-    queryKey: ["members", ws.organizationId],
+    queryKey: ["members", ws.organizationId, ws.userId],
     queryFn: async () => {
       const [m, inv] = await Promise.all([
         renderDb.from("organization_members").select("user_id, role, created_at").eq("organization_id", ws.organizationId).order("created_at"),
