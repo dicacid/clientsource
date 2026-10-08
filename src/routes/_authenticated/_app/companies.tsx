@@ -63,7 +63,7 @@ function Companies() {
   }
 
   const q = useQuery({
-    queryKey: ["companies", ws.organizationId, filters, sort, page],
+    queryKey: ["companies", ws.organizationId, ws.userId, filters, sort, page],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error, count } = await buildQuery("*", true).range(page * PAGE, page * PAGE + PAGE - 1);
