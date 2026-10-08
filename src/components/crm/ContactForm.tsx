@@ -41,7 +41,7 @@ const empty = {
 export function useCompanyOptions() {
   const ws = useWorkspace();
   return useQuery({
-    queryKey: ["company-options", ws.organizationId],
+    queryKey: ["company-options", ws.organizationId, ws.userId],
     queryFn: async () => {
       const { data, error } = await renderDb
         .from("companies")
