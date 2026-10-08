@@ -553,7 +553,9 @@ function applyQuery(state: State, table: DbRequest["table"], rows: any[], reques
 function withDefaults(table: DbRequest["table"], input: any, userId: string) {
   const now = new Date().toISOString();
   const row = { ...input };
-  if (!row.id && table !== "organization_members") row.id = randomUUID();
+  // All privately owned rows receive server-generated IDs; clients cannot collide with another user's record.
+  if (PERSONAL_TABLES.has(table)) row.id = randomUUID();
+  else if (!row.id && table !== "organization_members") row.id = randomUUID();
   if (!row.created_at) row.created_at = now;
   // Never trust owner_user_id supplied by a browser; ownership derives from the signed-in session.
   if (PERSONAL_TABLES.has(table)) row.owner_user_id = userId;
@@ -760,20 +762,19 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
       }
     }
     const companyIds = new Set((candidates as Company[]).map((company) => company.id));
-    state.activities = state.activities.filter((activity) => !companyIds.has(activity.company_id));
+    state.activities = state.activities.filter((activity) => !(activity.owner_user_id === userId && companyIds.has(activity.company_id)));
   }
 
   if (table === "contacts") {
     const contactIds = new Set((candidates as Contact[]).map((c) => c.id));
-    for (const activity of state.activities) if (activity.contact_id && contactIds.has(activity.contact_id)) activity.contact_id = null;
+    for (const activity of state.activities) if (activity.owner_user_id === userId && activity.contact_id && contactIds.has(activity.contact_id)) activity.contact_id = null;
   }
 
   if (table === "profiles" || table === "organizations") throw dbError("Permission denied.", "42501");
 
-  const ids = new Set(candidates.map((row) => row.id ?? row.organization_id + ":" + row.user_id));
-  (state as any)[table] = (state[table] as any[]).filter(
-    (row) => !ids.has(row.id ?? row.organization_id + ":" + row.user_id),
-  );
+  // Remove only the exact authorized rows, never another account's row with a colliding ID.
+  const selected = new Set(candidates);
+  (state as any)[table] = (state[table] as any[]).filter((row) => !selected.has(row));
   return candidates;
 }
 
