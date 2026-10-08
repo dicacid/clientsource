@@ -28,7 +28,7 @@ function Dashboard() {
   const in7 = localDate(7);
 
   const q = useQuery({
-    queryKey: ["dashboard", ws.organizationId, today],
+    queryKey: ["dashboard", ws.organizationId, ws.userId, today],
     queryFn: async () => {
       const org = ws.organizationId;
       const head = { count: "exact" as const, head: true };
