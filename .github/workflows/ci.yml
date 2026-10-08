@@ -12,10 +12,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+      SESSION_SECRET: local-ci-test-secret-32-bytes-long-not-for-production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install
+      - run: node --experimental-strip-types --test tests/account-isolation.test.mjs
       - run: npm run build
