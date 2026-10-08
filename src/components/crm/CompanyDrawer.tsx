@@ -25,7 +25,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
   const [addContact, setAddContact] = useState(false);
 
   const q = useQuery({
-    queryKey: ["company-detail", companyId],
+    queryKey: ["company-detail", ws.userId, companyId],
     enabled: !!companyId,
     queryFn: async () => {
       const [c, contacts, acts] = await Promise.all([
@@ -52,7 +52,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
   });
 
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["company-detail", companyId] });
+    qc.invalidateQueries({ queryKey: ["company-detail", ws.userId, companyId] });
     qc.invalidateQueries({ queryKey: ["companies"] });
     qc.invalidateQueries({ queryKey: ["contacts"] });
     qc.invalidateQueries({ queryKey: ["dashboard"] });

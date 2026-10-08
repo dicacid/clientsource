@@ -178,7 +178,7 @@ export const discoverTargets = createServerFn({ method: "POST" })
   .handler(({ data, context }) =>
     wrap(async () => {
       await assertMember(context);
-      const feedback = await prospectFeedbackForOrganization(context.organizationId);
+      const feedback = await prospectFeedbackForOrganization(context.organizationId, context.userId);
       const feedbackHint =
         feedback.samples >= 3
           ? `\nWorkspace outcome feedback (use only as a tie-breaker after product fit): positive industries: ${feedback.positiveIndustries.join(", ") || "none"}; positive company sizes: ${feedback.positiveEmployeeRanges.join(", ") || "none"}; repeatedly not-relevant industries: ${feedback.negativeIndustries.join(", ") || "none"}.`

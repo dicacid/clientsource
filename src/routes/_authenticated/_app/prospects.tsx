@@ -75,7 +75,7 @@ function ProspectIntelligencePage() {
 
   useEffect(() => {
     void load();
-  }, [ws.organizationId]);
+  }, [ws.organizationId, ws.userId]);
 
   async function patch(id: string, values: Partial<Dossier>) {
     const next = { ...values, updated_at: new Date().toISOString() };

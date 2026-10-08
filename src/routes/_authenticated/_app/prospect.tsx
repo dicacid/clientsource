@@ -50,9 +50,9 @@ const CLAIMS_STORE = "pipeline.prospect.claims";
 // The open-source build intentionally ships with no business-specific defaults.
 const DEFAULT_CLAIMS: Record<string, string> = {};
 const claimKey = (site: string) => normalizeWebsite(site)?.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] ?? "";
-function readClaims(): Record<string, string> {
+function readClaims(userId: string): Record<string, string> {
   try {
-    return { ...DEFAULT_CLAIMS, ...JSON.parse(localStorage.getItem(CLAIMS_STORE) ?? "{}") };
+    return { ...DEFAULT_CLAIMS, ...JSON.parse(localStorage.getItem(`${CLAIMS_STORE}.${userId}`) ?? "{}") };
   } catch {
     return { ...DEFAULT_CLAIMS };
   }
@@ -82,18 +82,18 @@ function ProspectPage() {
 
   // Load only this sender domain's approved claims (or blank) whenever the domain changes.
   useEffect(() => {
-    setClaims(domainKey ? (readClaims()[domainKey] ?? "") : "");
-  }, [domainKey]);
+    setClaims(domainKey ? (readClaims(ws.userId)[domainKey] ?? "") : "");
+  }, [domainKey, ws.userId]);
 
   function changeClaims(v: string) {
     setClaims(v);
     if (!domainKey) return;
-    localStorage.setItem(CLAIMS_STORE, JSON.stringify({ ...readClaims(), [domainKey]: v }));
+    localStorage.setItem(`${CLAIMS_STORE}.${ws.userId}`, JSON.stringify({ ...readClaims(ws.userId), [domainKey]: v }));
   }
 
   useEffect(() => {
     try {
-      const s = JSON.parse(localStorage.getItem(STORE) ?? "{}");
+      const s = JSON.parse(localStorage.getItem(`${STORE}.${ws.userId}`) ?? "{}");
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       if (s.website) setWebsite(s.website);
@@ -197,7 +197,7 @@ function ProspectPage() {
     if (!sender.name) return setError("Enter your name.");
     if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
     if (!normalizeWebsite(website)) return setError("Enter your website, like example.com");
-    localStorage.setItem(STORE, JSON.stringify({ ...sender, website, businessQuery, industryQuery, includeCompetitors, region }));
+    localStorage.setItem(`${STORE}.${ws.userId}`, JSON.stringify({ ...sender, website, businessQuery, industryQuery, includeCompetitors, region }));
     // Fresh run: drop any previous sender's analysis, prospects and drafts.
     const id = ++runId.current;
     setRows([]);

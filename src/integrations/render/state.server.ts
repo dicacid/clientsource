@@ -10,6 +10,7 @@ type Organization = { id: string; name: string; created_at: string };
 type OrganizationMember = { organization_id: string; user_id: string; role: Role; created_at: string };
 type PendingInvite = { id: string; organization_id: string; email: string; role: "admin" | "member"; invited_by: string; created_at: string; token_hash?: string | null; expires_at?: string | null };
 type Company = {
+  owner_user_id?: string;
   id: string;
   organization_id: string;
   name: string;
@@ -22,6 +23,7 @@ type Company = {
   created_at: string;
 };
 type Contact = {
+  owner_user_id?: string;
   id: string;
   organization_id: string;
   company_id: string;
@@ -37,6 +39,7 @@ type Contact = {
   created_at: string;
 };
 type Activity = {
+  owner_user_id?: string;
   id: string;
   organization_id: string;
   company_id: string;
@@ -48,6 +51,7 @@ type Activity = {
 };
 
 type ProspectDossier = {
+  owner_user_id?: string;
   id: string;
   organization_id: string;
   domain: string;
@@ -79,6 +83,7 @@ type ProspectDossier = {
 };
 
 type PartyEvent = {
+  owner_user_id?: string;
   id: string;
   organization_id: string;
   name: string;
@@ -132,6 +137,8 @@ export type DbRequest = {
   mode?: "single" | "maybeSingle";
   returning?: boolean;
 };
+
+const PERSONAL_TABLES = new Set<DbRequest["table"]>(["companies", "contacts", "activities", "prospect_dossiers", "party_events"]);
 
 export type DbResult = {
   data: any;
@@ -464,6 +471,15 @@ function scopedRows(state: State, table: DbRequest["table"], userId: string): an
   }
   if (!member) return [];
   if (table === "organizations") return state.organizations.filter((r) => r.id === member.organization_id);
+  // Private CRM and research records belong to their creator, not to every workspace member.
+  // Legacy records with no provable owner stay stored but are not exposed to other users.
+  if (PERSONAL_TABLES.has(table)) {
+    return (state[table] as any[]).filter((row) =>
+      row.organization_id === member.organization_id &&
+      (row.owner_user_id === userId ||
+        (table === "party_events" && !row.owner_user_id && row.created_by === userId)),
+    );
+  }
   return (state[table] as any[]).filter((r) => r.organization_id === member.organization_id);
 }
 
@@ -496,7 +512,7 @@ function compareFilter(row: any, filter: Filter): boolean {
 function decorate(state: State, table: DbRequest["table"], row: any) {
   const next = { ...row };
   if (table === "contacts") {
-    const company = state.companies.find((c) => c.id === row.company_id);
+    const company = state.companies.find((c) => c.id === row.company_id && c.owner_user_id === row.owner_user_id);
     next.companies = company ? { name: company.name, website: company.website } : null;
   }
   if (table === "organization_members") {
@@ -537,8 +553,12 @@ function applyQuery(state: State, table: DbRequest["table"], rows: any[], reques
 function withDefaults(table: DbRequest["table"], input: any, userId: string) {
   const now = new Date().toISOString();
   const row = { ...input };
-  if (!row.id && table !== "organization_members") row.id = randomUUID();
+  // All privately owned rows receive server-generated IDs; clients cannot collide with another user's record.
+  if (PERSONAL_TABLES.has(table)) row.id = randomUUID();
+  else if (!row.id && table !== "organization_members") row.id = randomUUID();
   if (!row.created_at) row.created_at = now;
+  // Never trust owner_user_id supplied by a browser; ownership derives from the signed-in session.
+  if (PERSONAL_TABLES.has(table)) row.owner_user_id = userId;
   if (table === "companies") {
     row.website = normalizeWebsite(row.website);
     row.status ??= "new";
@@ -623,13 +643,13 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
       const actor = requireMembership(state, userId);
       if (row.organization_id !== actor.organization_id) throw dbError("Permission denied.", "42501");
       if (table === "contacts") {
-        const company = state.companies.find((c) => c.id === row.company_id && c.organization_id === actor.organization_id);
+        const company = state.companies.find((c) => c.id === row.company_id && c.organization_id === actor.organization_id && c.owner_user_id === userId);
         if (!company) throw dbError("contacts company reference is invalid", "23503", "contacts");
       }
       if (table === "activities") {
-        const company = state.companies.find((c) => c.id === row.company_id && c.organization_id === actor.organization_id);
+        const company = state.companies.find((c) => c.id === row.company_id && c.organization_id === actor.organization_id && c.owner_user_id === userId);
         if (!company) throw dbError("activities company reference is invalid", "23503");
-        if (row.contact_id && !state.contacts.some((c) => c.id === row.contact_id && c.organization_id === actor.organization_id)) {
+        if (row.contact_id && !state.contacts.some((c) => c.id === row.contact_id && c.organization_id === actor.organization_id && c.owner_user_id === userId)) {
           throw dbError("activities contact reference is invalid", "23503");
         }
       }
@@ -637,7 +657,13 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
         row.domain = String(row.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
         if (!row.domain || !row.domain.includes(".")) throw dbError("prospect dossier domain is invalid", "400");
         row.sender_website = normalizeWebsite(row.sender_website) ?? String(row.sender_website ?? "");
-        if (state.prospect_dossiers.some((d) => d.organization_id === actor.organization_id && d.domain === row.domain)) {
+        if (row.company_id && !state.companies.some((c) => c.id === row.company_id && c.owner_user_id === userId)) {
+          throw dbError("prospect dossier company reference is invalid", "23503");
+        }
+        if (row.contact_id && !state.contacts.some((c) => c.id === row.contact_id && c.owner_user_id === userId)) {
+          throw dbError("prospect dossier contact reference is invalid", "23503");
+        }
+        if (state.prospect_dossiers.some((d) => d.organization_id === actor.organization_id && d.owner_user_id === userId && d.domain === row.domain)) {
           throw dbError("prospect dossier already exists", "23505");
         }
       }
@@ -661,11 +687,22 @@ function updateRows(state: State, request: DbRequest, userId: string): any[] {
   const allowed = table === "profiles" ? ["full_name"] : null;
   for (const row of candidates) {
     for (const [key, value] of Object.entries(patch)) {
-      if (["id", "organization_id", "created_at", "user_id"].includes(key)) continue;
+      if (["id", "organization_id", "created_at", "user_id", "owner_user_id", "created_by", "updated_by"].includes(key)) continue;
       if (allowed && !allowed.includes(key)) continue;
+      // Foreign-key updates must not let one account attach another account's records.
+      if (key === "company_id" && ["contacts", "activities", "prospect_dossiers"].includes(table) && value &&
+          !state.companies.some((c) => c.id === value && c.owner_user_id === userId)) {
+        throw dbError("company reference is invalid", "23503");
+      }
+      if (key === "contact_id" && ["activities", "prospect_dossiers"].includes(table) && value &&
+          !state.contacts.some((c) => c.id === value && c.owner_user_id === userId)) {
+        throw dbError("contact reference is invalid", "23503");
+      }
       row[key] = table === "companies" && key === "website" ? normalizeWebsite(value) : value;
     }
     if (table === "party_events") {
+      // An older party event has a verifiable creator and can be safely adopted.
+      row.owner_user_id = userId;
       row.updated_by = userId;
       row.updated_at = new Date().toISOString();
       row.name = String(row.name ?? "").trim().slice(0, 200);
@@ -725,20 +762,19 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
       }
     }
     const companyIds = new Set((candidates as Company[]).map((company) => company.id));
-    state.activities = state.activities.filter((activity) => !companyIds.has(activity.company_id));
+    state.activities = state.activities.filter((activity) => !(activity.owner_user_id === userId && companyIds.has(activity.company_id)));
   }
 
   if (table === "contacts") {
     const contactIds = new Set((candidates as Contact[]).map((c) => c.id));
-    for (const activity of state.activities) if (activity.contact_id && contactIds.has(activity.contact_id)) activity.contact_id = null;
+    for (const activity of state.activities) if (activity.owner_user_id === userId && activity.contact_id && contactIds.has(activity.contact_id)) activity.contact_id = null;
   }
 
   if (table === "profiles" || table === "organizations") throw dbError("Permission denied.", "42501");
 
-  const ids = new Set(candidates.map((row) => row.id ?? row.organization_id + ":" + row.user_id));
-  (state as any)[table] = (state[table] as any[]).filter(
-    (row) => !ids.has(row.id ?? row.organization_id + ":" + row.user_id),
-  );
+  // Remove only the exact authorized rows, never another account's row with a colliding ID.
+  const selected = new Set(candidates);
+  (state as any)[table] = (state[table] as any[]).filter((row) => !selected.has(row));
   return candidates;
 }
 
@@ -885,7 +921,7 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
       if (fn === "seed_sample_data") {
         const actor = requireMembership(state, userId);
         if (!["owner", "admin"].includes(actor.role)) throw dbError("NOT_ADMIN");
-        if (state.companies.some((c) => c.organization_id === actor.organization_id)) throw dbError("ORG_NOT_EMPTY");
+        if (state.companies.some((c) => c.organization_id === actor.organization_id && c.owner_user_id === userId)) throw dbError("ORG_NOT_EMPTY");
         return null;
       }
 
@@ -899,9 +935,9 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
 }
 
 
-export async function prospectFeedbackForOrganization(organizationId: string) {
+export async function prospectFeedbackForOrganization(organizationId: string, userId: string) {
   const state = await readState();
-  const rows = state.prospect_dossiers.filter((d) => d.organization_id === organizationId && d.outcome !== "unknown");
+  const rows = state.prospect_dossiers.filter((d) => d.organization_id === organizationId && d.owner_user_id === userId && d.outcome !== "unknown");
   const positives = rows.filter((d) => ["replied", "interested", "customer"].includes(d.outcome));
   const negatives = rows.filter((d) => d.outcome === "not_relevant");
 

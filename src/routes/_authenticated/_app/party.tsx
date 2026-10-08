@@ -123,7 +123,7 @@ function PartyMode() {
   const [saving, setSaving] = useState(false);
 
   const eventsQuery = useQuery({
-    queryKey: ["party-events", ws.organizationId],
+    queryKey: ["party-events", ws.organizationId, ws.userId],
     queryFn: async () => {
       const { data, error } = await renderDb
         .from("party_events")
@@ -136,7 +136,7 @@ function PartyMode() {
   });
 
   const membersQuery = useQuery({
-    queryKey: ["party-members", ws.organizationId],
+    queryKey: ["party-members", ws.organizationId, ws.userId],
     queryFn: async () => {
       const { data: members, error } = await renderDb
         .from("organization_members")
