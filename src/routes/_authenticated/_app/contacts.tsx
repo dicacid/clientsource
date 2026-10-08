@@ -56,7 +56,7 @@ function Contacts() {
   }
 
   const q = useQuery({
-    queryKey: ["contacts", ws.organizationId, search, status, overdue, today, page],
+    queryKey: ["contacts", ws.organizationId, ws.userId, search, status, overdue, today, page],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error, count } = await buildQuery(true).range(page * PAGE, page * PAGE + PAGE - 1);
