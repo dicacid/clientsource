@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -8,7 +9,6 @@ import {
   ClipboardList,
   FileUp,
   Globe2,
-  ListChecks,
   Search,
   ShieldCheck,
   Sparkles,
@@ -95,7 +95,7 @@ const steps = [
   },
 ] as const;
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return <p className="font-mono text-xs font-medium uppercase tracking-[0.17em] text-primary">{children}</p>;
 }
 
