@@ -14,7 +14,7 @@ export const Route = createFileRoute("/auth")({
       { title: "Sign in — SPA Intelligence" },
       { name: "description", content: "Private commercial intelligence for Solar Power Australia." },
       { property: "og:title", content: "Sign in — SPA Intelligence" },
-      { property: "og:description", content: "Sign in to your team's prospecting workspace." },
+      { property: "og:description", content: "Sign in to SPA Intelligence with your company email." },
     ],
   }),
   component: AuthPage,
@@ -61,13 +61,10 @@ function AuthPage() {
           options: { data: { full_name: fullName.trim() } },
         });
         if (error) throw error;
-        setInfo("Account created. Sign in with your email and password.");
-        setMode("signin");
-      } else {
-        const { error } = await renderDb.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) throw error;
-        navigate({ to: "/onboarding" });
       }
+      const { error } = await renderDb.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
+      await navigate({ to: "/prospect", replace: true });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -76,7 +73,7 @@ function AuthPage() {
   }
 
   const heading =
-    mode === "signin" ? "Sign in to your workspace" :
+    mode === "signin" ? "Sign in to SPA Intelligence" :
     mode === "signup" ? "Create your account" :
     "Reset your password";
 
@@ -94,8 +91,14 @@ function AuthPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             {mode === "forgot"
               ? "Enter your account email and we'll send a one-time reset link."
-              : "Private commercial intelligence workspace. Human approval remains the decision point."}
+              : "Use your company email and password to access SPA Intelligence."}
           </p>
+          {mode !== "forgot" && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Automatic access for RevealingMindAI.org, SolarOnline.com.au,
+              SolarPowerAustralia.com.au and Elmofo.com.au emails.
+            </p>
+          )}
         </div>
 
         <form onSubmit={submit} className="space-y-4 rounded-lg border bg-card p-6">

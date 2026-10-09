@@ -10,7 +10,7 @@ export async function signOut(queryClient: QueryClient) {
 
 export type Membership = { organizationId: string; orgName: string; role: Role; userId: string; email: string };
 
-/** Run after every confirmed login: claim invite, then look up membership. */
+/** Resolve automatic company access or an explicit invitation after authentication. */
 export async function resolveMembership(): Promise<
   | { state: "member"; membership: Membership }
   | { state: "no_org" }

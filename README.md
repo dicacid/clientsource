@@ -85,8 +85,8 @@ Open the local URL printed by Vite.
 
 1. Open `/auth`.
 2. Create an account and sign in.
-3. The first user can create the workspace and becomes its owner.
-4. Additional users must be invited by exact email address before joining.
+3. Accounts at `revealingmindai.org`, `solaronline.com.au`, `solarpoweraustralia.com.au` or `elmofo.com.au` receive access automatically after password authentication, with no workspace setup or invitation. New accounts are signed in immediately after registration.
+4. Approved accounts share the existing SPA data. On an empty installation, the first approved account initializes the internal data scope and becomes its owner; subsequent accounts are members. Existing roles are preserved. Other domains still require the existing invitation flow.
 
 ## Environment variables
 
@@ -172,3 +172,4 @@ Prospect suggestions are AI-assisted and should be reviewed by a human. Contacts
 ## License
 
 MIT — see [LICENSE](LICENSE).
+

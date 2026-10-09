@@ -1,5 +1,6 @@
 import { createRedisConnection } from "./redis.server";
 import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { hasAutomaticCompanyAccess } from "../../lib/company-access";
 
 const STATE_KEY = process.env["STATE_KEY"] || "spa-intelligence:state:v1";
 
@@ -262,10 +263,12 @@ export async function signUp(email: string, password: string, fullName: string) 
 }
 
 export async function signIn(email: string, password: string) {
-  const state = await readState();
-  const user = state.users.find((u) => u.email === normalizeEmail(email));
-  if (!user || !verifyPassword(password, user.password_hash)) throw new Error("Invalid email or password.");
-  return { user: publicUser(user), access_token: signToken(user) };
+  return mutateState((state) => {
+    const user = state.users.find((u) => u.email === normalizeEmail(email));
+    if (!user || !verifyPassword(password, user.password_hash)) throw new Error("Invalid email or password.");
+    ensureCompanyMembership(state, user);
+    return { user: publicUser(user), access_token: signToken(user) };
+  });
 }
 
 export async function userById(userId: string) {
@@ -278,13 +281,54 @@ function memberFor(state: State, userId: string) {
   return state.organization_members.find((m) => m.user_id === userId) ?? null;
 }
 
+/** Keep data scoped internally while approved company accounts join automatically. */
+function ensureCompanyMembership(state: State, user: User) {
+  const existing = memberFor(state, user.id);
+  if (existing || !hasAutomaticCompanyAccess(user.email)) return existing;
+
+  const invite = state.pending_invites.find((i) =>
+    normalizeEmail(i.email) === normalizeEmail(user.email) &&
+    state.organizations.some((org) => org.id === i.organization_id),
+  );
+  let organization = invite
+    ? state.organizations.find((org) => org.id === invite.organization_id)
+    : state.organizations[0];
+  const firstMember = !organization;
+  const created_at = new Date().toISOString();
+  if (!organization) {
+    organization = { id: randomUUID(), name: "Solar Power Australia", created_at };
+    state.organizations.push(organization);
+  }
+  const member: OrganizationMember = {
+    organization_id: organization.id,
+    user_id: user.id,
+    role: firstMember ? "owner" : invite?.role ?? "member",
+    created_at,
+  };
+  state.organization_members.push(member);
+  state.pending_invites = state.pending_invites.filter((i) => normalizeEmail(i.email) !== normalizeEmail(user.email));
+  return member;
+}
+
+function membershipDetails(state: State, userId: string) {
+  const member = memberFor(state, userId);
+  const org = member && state.organizations.find((o) => o.id === member.organization_id);
+  if (!member || !org) return null;
+  return { organizationId: org.id, orgName: org.name, role: member.role, userId };
+}
+
 export async function membershipForUser(userId: string) {
   const state = await readState();
-  const member = memberFor(state, userId);
-  if (!member) return null;
-  const org = state.organizations.find((o) => o.id === member.organization_id);
-  if (!org) return null;
-  return { organizationId: org.id, orgName: org.name, role: member.role, userId };
+  const membership = membershipDetails(state, userId);
+  if (membership) return membership;
+  const user = state.users.find((u) => u.id === userId);
+  if (!user || !hasAutomaticCompanyAccess(user.email)) return null;
+  // Existing sessions gain access too, without waiting for another sign-in.
+  return mutateState((latest) => {
+    const currentUser = latest.users.find((u) => u.id === userId);
+    if (currentUser) ensureCompanyMembership(latest, currentUser);
+    return membershipDetails(latest, userId);
+  });
 }
 
 function errorResult(error: unknown): DbResult {
@@ -630,6 +674,7 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
       if (fn === "workspace_exists") return state.organizations.length > 0;
 
       if (fn === "claim_invite") {
+        ensureCompanyMembership(state, user);
         if (memberFor(state, userId)) return null;
         const invite = state.pending_invites.find((i) => i.email === user.email);
         if (!invite) return null;
@@ -754,3 +799,4 @@ export async function organizationIdsForInternalJobs() {
   const state = await readState();
   return state.organizations.map((organization) => organization.id);
 }
+

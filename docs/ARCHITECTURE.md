@@ -24,7 +24,8 @@ App-native authentication lives mainly in `src/integrations/render/state.server.
 - Passwords use salted scrypt hashes.
 - Signed sessions use HMAC-SHA256 and `SESSION_SECRET`.
 - Protected server functions resolve session and workspace membership.
-- The first user can create the workspace and becomes owner.
+- Approved company domains receive automatic membership after password authentication. The internal organization record keeps SPA data scoped; users do not create or join a workspace.
+- The first approved account on an empty installation initializes the internal organization and becomes owner. Existing organizations, data and roles are reused.
 - The last owner cannot be removed or demoted.
 
 Browser sessions currently use a signed bearer token in local storage. Moving to HttpOnly cookies is a planned hardening change.

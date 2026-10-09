@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -11,6 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
+  beforeLoad: async () => {
+    const result = await resolveMembership();
+    if (result.state === "member") throw redirect({ to: "/prospect", replace: true });
+  },
   head: () => ({
     meta: [
       { title: "Get started — SPA Intelligence" },

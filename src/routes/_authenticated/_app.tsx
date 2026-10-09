@@ -102,7 +102,7 @@ function AppLayout() {
 
         <div className="hidden md:absolute md:bottom-0 md:block md:w-64 md:border-t md:border-sidebar-border md:p-4">
           <div className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-sidebar-foreground/50">
-            <Activity className="h-3.5 w-3.5 text-emerald-400" />Private intelligence workspace
+            <Activity className="h-3.5 w-3.5 text-emerald-400" />Private commercial intelligence
           </div>
           <div className="truncate text-xs text-sidebar-foreground/60">{membership.email}</div>
           <div className="mt-3 flex gap-2">
