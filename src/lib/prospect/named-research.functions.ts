@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireRenderMember } from "@/integrations/render/auth-middleware";
+import { allowPublicResearch } from "@/integrations/render/auth-middleware";
 import { aiJson } from "./ai.server";
 import { fetchPage, htmlToText } from "./web.server";
 import { searchPublicWeb, type SearchHit } from "./search.server";
@@ -34,7 +34,7 @@ const plain = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ")
 const containsName = (content: string, name: string) => plain(content).includes(plain(name));
 
 export const researchBusinessByName = createServerFn({ method: "POST" })
-  .middleware([requireRenderMember])
+  .middleware([allowPublicResearch])
   .inputValidator((value: unknown) => inputSchema.parse(value))
   .handler(async ({ data }): Promise<NamedBusinessResearch> => {
     const place = data.location || (data.region === "domestic" ? "Australia" : "");

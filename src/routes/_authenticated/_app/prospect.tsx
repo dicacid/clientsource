@@ -54,7 +54,7 @@ const DEFAULT_CLAIMS: Record<string, string> = {};
 const claimKey = (site: string) => normalizeWebsite(site)?.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] ?? "";
 function readClaims(userId: string): Record<string, string> {
   try {
-    return { ...DEFAULT_CLAIMS, ...JSON.parse(localStorage.getItem(`${CLAIMS_STORE}.${userId}`) ?? "{}") };
+    return { ...DEFAULT_CLAIMS, ...JSON.parse((userId === "guest" ? sessionStorage : localStorage).getItem(`${CLAIMS_STORE}.${userId}`) ?? "{}") };
   } catch {
     return { ...DEFAULT_CLAIMS };
   }
@@ -62,6 +62,7 @@ function readClaims(userId: string): Record<string, string> {
 
 function ProspectPage() {
   const ws = useWorkspace();
+  const guest = ws.userId === "guest";
   const qc = useQueryClient();
   const analyze = useServerFn(analyzeBusiness);
   const researchName = useServerFn(researchBusinessByName);
@@ -94,12 +95,12 @@ function ProspectPage() {
   function changeClaims(v: string) {
     setClaims(v);
     if (!domainKey) return;
-    localStorage.setItem(`${CLAIMS_STORE}.${ws.userId}`, JSON.stringify({ ...readClaims(ws.userId), [domainKey]: v }));
+    (guest ? sessionStorage : localStorage).setItem(`${CLAIMS_STORE}.${ws.userId}`, JSON.stringify({ ...readClaims(ws.userId), [domainKey]: v }));
   }
 
   useEffect(() => {
     try {
-      const s = JSON.parse(localStorage.getItem(`${STORE}.${ws.userId}`) ?? "{}");
+      const s = JSON.parse((guest ? sessionStorage : localStorage).getItem(`${STORE}.${ws.userId}`) ?? "{}");
       if (s.name) setName(s.name);
       if (s.email) setEmail(s.email);
       if (s.website) setWebsite(s.website);
@@ -111,17 +112,20 @@ function ProspectPage() {
     } catch {
       /* ignore */
     }
+    if (guest) return;
     renderDb
       .from("profiles")
       .select("full_name")
       .eq("id", ws.userId)
       .maybeSingle()
       .then(({ data }) => data?.full_name && setName((n) => n || data.full_name!));
-  }, [ws.userId]);
+  }, [ws.userId, guest]);
 
   const sender = { name: name.trim(), email: email.trim() };
 
   async function persistDossier(target: Target, result: ContactResult, senderWebsite: string) {
+    // Anonymous research is session-only; never write it into another person's CRM.
+    if (guest) return "";
     const now = new Date().toISOString();
     const base = {
       company_name: target.name,
@@ -206,7 +210,7 @@ function ProspectPage() {
     if (!hasSite && !businessQuery.trim()) return setError("Enter a business name to search without a website.");
     if (hasSite && !sender.name) return setError("Enter your name for the outreach workflow.");
     if (hasSite && !EMAIL_RE.test(sender.email)) return setError("Enter a valid email for the outreach workflow.");
-    localStorage.setItem(`${STORE}.${ws.userId}`, JSON.stringify({ ...sender, website, businessQuery, locationQuery, industryQuery, includeCompetitors, region }));
+    (guest ? sessionStorage : localStorage).setItem(`${STORE}.${ws.userId}`, JSON.stringify({ ...sender, website, businessQuery, locationQuery, industryQuery, includeCompetitors, region }));
     // Start each run cleanly. Name-only research does not require a sender or a website.
     const id = ++runId.current;
     setRows([]);
@@ -309,6 +313,7 @@ function ProspectPage() {
   }
 
   async function save(i: number) {
+    if (guest) return;
     const row = rows[i]!;
     const res = row.result!;
     const site = normalizeWebsite(row.domain);
@@ -377,7 +382,8 @@ function ProspectPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Prospect finder" sub="Search by business name and location, even when there is no website. Or enter your own website to run the existing outreach workflow." />
+      <PageHeader title="Free business research" sub="No account, signup or website required. Research a business, find possible competitors, or analyse your website to discover prospects." />
+      {guest && <p className="mb-5 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">Free public access. Results are private to this browser tab and are not stored in a shared workspace. No registration or payment required.</p>}
 
       <form onSubmit={start} className="grid gap-5 rounded-lg border bg-card p-5 md:grid-cols-2 xl:grid-cols-4">
         <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-4">Enter a business name to look for public information and competitors. No website or contact details needed.</p>
@@ -522,7 +528,7 @@ function ProspectPage() {
               key={r.domain}
               row={r}
               onChange={(p) => updateDraft(i, p)}
-              onSave={() => save(i)}
+              onSave={guest ? undefined : () => save(i)}
               onRetry={() => retry(i)}
             />
           ))}
@@ -535,7 +541,7 @@ function ProspectPage() {
       )}
 
       <p className="mt-8 text-xs text-muted-foreground">
-        Website-based outreach checks suggested company websites and saves dossiers. Business-name research instead uses public search listings, allows a blank website and saves selected companies directly to your CRM. Competitor relationships are leads until verified. Nothing is
+        Website-based outreach checks suggested company websites{guest ? " and shows results in this tab" : " and saves dossiers to your private CRM"}. Business-name research uses public search listings and allows a blank website{guest ? "" : " and saves selected companies to your CRM"}. Competitor relationships are leads until verified. Nothing is
         sent from this app — review each email and send it from your own mail app. Follow local rules for cold outreach (e.g. GDPR/CAN-SPAM) and honor
         opt-out replies.
       </p>
@@ -621,7 +627,7 @@ function ProspectCard({
 }: {
   row: Row;
   onChange: (p: Partial<ContactResult>) => void;
-  onSave: () => void;
+  onSave?: () => void;
   onRetry: () => void;
 }) {
   const res = row.result;
@@ -755,10 +761,10 @@ function ProspectCard({
             <Button variant="outline" onClick={copy} className="gap-2">
               <Copy className="h-4 w-4" /> Copy
             </Button>
-            <Button variant="ghost" onClick={onSave} disabled={row.saved} className="gap-2">
+            {onSave && <Button variant="ghost" onClick={onSave} disabled={row.saved} className="gap-2">
               {row.saved ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {row.saved ? "Saved to CRM" : "Save to CRM"}
-            </Button>
+            </Button>}
             {res.source_url && (
               <a href={res.source_url} target="_blank" rel="noreferrer" className="self-center text-xs text-muted-foreground hover:text-primary">
                 Source page

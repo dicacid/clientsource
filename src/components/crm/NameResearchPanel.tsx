@@ -8,6 +8,7 @@ import type { NamedBusinessResearch } from "@/lib/prospect/named-research.functi
 
 export function NameResearchPanel({ result }: { result: NamedBusinessResearch }) {
   const ws = useWorkspace();
+  const guest = ws.userId === "guest";
   const [saved, setSaved] = useState<string[]>([]);
   const [saving, setSaving] = useState<string[]>([]);
 
@@ -48,6 +49,7 @@ export function NameResearchPanel({ result }: { result: NamedBusinessResearch })
   }
 
   const savedButton = (companyName: string, sourceUrl: string | null) => {
+    if (guest) return null;
     const key = companyName.toLowerCase();
     const isSaved = saved.includes(key);
     return (
@@ -71,7 +73,7 @@ export function NameResearchPanel({ result }: { result: NamedBusinessResearch })
         </div>
         {result.overview && <p className="mt-3 text-sm">{result.overview}</p>}
         <p className="mt-3 text-xs text-muted-foreground">{result.notice}</p>
-        <p className="mt-2 text-xs text-muted-foreground">No website was required or invented. If no official website is confirmed, the CRM record will have an empty website field.</p>
+        <p className="mt-2 text-xs text-muted-foreground">No website was required or invented. Public guest research is not saved to another user’s account.</p>
         <div className="mt-4">
           <h3 className="mb-2 font-medium">Public references ({result.sources.length})</h3>
           {result.sources.length ? (
@@ -86,7 +88,7 @@ export function NameResearchPanel({ result }: { result: NamedBusinessResearch })
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">No matching listing was retrieved. You can still save this business and investigate it manually.</p>
+            <p className="text-sm text-muted-foreground">No matching listing was retrieved. Try another spelling, location or industry and verify manually.</p>
           )}
           <a href={result.search_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline">
             Check search results manually <ExternalLink className="h-3 w-3" />
