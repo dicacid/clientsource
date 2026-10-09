@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/crm/shared";
+import { NameResearchPanel } from "@/components/crm/NameResearchPanel";
+import { researchBusinessByName, type NamedBusinessResearch } from "@/lib/prospect/named-research.functions";
 import { useWorkspace } from "@/lib/workspace";
 import { EMAIL_RE } from "@/lib/constants";
 import { normalizeWebsite } from "@/lib/website";
@@ -62,13 +64,17 @@ function ProspectPage() {
   const ws = useWorkspace();
   const qc = useQueryClient();
   const analyze = useServerFn(analyzeBusiness);
+  const researchName = useServerFn(researchBusinessByName);
   const discover = useServerFn(discoverTargets);
   const research = useServerFn(researchAndDraft);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState(ws.email);
   const [website, setWebsite] = useState("");
+  const [useWebsiteMode, setUseWebsiteMode] = useState(false);
   const [businessQuery, setBusinessQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
+  const [namedResult, setNamedResult] = useState<NamedBusinessResearch | null>(null);
   const [industryQuery, setIndustryQuery] = useState("");
   const [includeCompetitors, setIncludeCompetitors] = useState(true);
   const [region, setRegion] = useState<"domestic" | "international" | "both">("domestic");
@@ -98,6 +104,7 @@ function ProspectPage() {
       if (s.email) setEmail(s.email);
       if (s.website) setWebsite(s.website);
       if (typeof s.businessQuery === "string") setBusinessQuery(s.businessQuery);
+      if (typeof s.locationQuery === "string") setLocationQuery(s.locationQuery);
       if (typeof s.industryQuery === "string") setIndustryQuery(s.industryQuery);
       if (typeof s.includeCompetitors === "boolean") setIncludeCompetitors(s.includeCompetitors);
       if (s.region === "domestic" || s.region === "international" || s.region === "both") setRegion(s.region);
@@ -194,16 +201,34 @@ function ProspectPage() {
   async function start(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!sender.name) return setError("Enter your name.");
-    if (!EMAIL_RE.test(sender.email)) return setError("Enter a valid email.");
-    if (!normalizeWebsite(website)) return setError("Enter your website, like example.com");
-    localStorage.setItem(`${STORE}.${ws.userId}`, JSON.stringify({ ...sender, website, businessQuery, industryQuery, includeCompetitors, region }));
-    // Fresh run: drop any previous sender's analysis, prospects and drafts.
+    const hasSite = useWebsiteMode;
+    if (hasSite && !normalizeWebsite(website)) return setError("Enter a valid website or leave the field blank.");
+    if (!hasSite && !businessQuery.trim()) return setError("Enter a business name to search without a website.");
+    if (hasSite && !sender.name) return setError("Enter your name for the outreach workflow.");
+    if (hasSite && !EMAIL_RE.test(sender.email)) return setError("Enter a valid email for the outreach workflow.");
+    localStorage.setItem(`${STORE}.${ws.userId}`, JSON.stringify({ ...sender, website, businessQuery, locationQuery, industryQuery, includeCompetitors, region }));
+    // Start each run cleanly. Name-only research does not require a sender or a website.
     const id = ++runId.current;
     setRows([]);
     setAnalysis(null);
+    setNamedResult(null);
     try {
       setPhase("analyzing");
+      if (!hasSite) {
+        const result = await researchName({
+          data: {
+            business_name: businessQuery.trim(),
+            location: locationQuery.trim(),
+            industry: industryQuery.trim(),
+            region,
+            include_competitors: includeCompetitors,
+          },
+        });
+        if (id !== runId.current) return;
+        setNamedResult(result);
+        setPhase("done");
+        return;
+      }
       const a = await analyze({ data: { website } });
       if (id !== runId.current) return;
       setAnalysis(a);
@@ -352,24 +377,17 @@ function ProspectPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="Prospect finder" sub="Use your website plus an optional business name, industry, or both to find prospects, competitors, decision-makers and outreach." />
+      <PageHeader title="Prospect finder" sub="Search by business name and location, even when there is no website. Or enter your own website to run the existing outreach workflow." />
 
       <form onSubmit={start} className="grid gap-5 rounded-lg border bg-card p-5 md:grid-cols-2 xl:grid-cols-4">
+        <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-4">Enter a business name to look for public information and competitors. No website or contact details needed.</p>
         <div className="space-y-1.5">
-          <Label htmlFor="p-name">Your name</Label>
-          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+          <Label htmlFor="p-business-query">Business to research (name)</Label>
+          <Input id="p-business-query" value={businessQuery} onChange={(e) => setBusinessQuery(e.target.value)} placeholder="e.g. Butlers Events Hire" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="p-email">Your email</Label>
-          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-site">Your business website</Label>
-          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-business-query">Business or company (optional)</Label>
-          <Input id="p-business-query" value={businessQuery} onChange={(e) => setBusinessQuery(e.target.value)} placeholder="e.g. Orica, Ampcontrol" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+          <Label htmlFor="p-location-query">Town, suburb or location (optional)</Label>
+          <Input id="p-location-query" value={locationQuery} onChange={(e) => setLocationQuery(e.target.value)} placeholder="e.g. Cardiff NSW" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="p-industry-query">Industry (optional)</Label>
@@ -388,13 +406,36 @@ function ProspectPage() {
             </SelectContent>
           </Select>
         </div>
+
         <label className="flex items-start gap-3 border bg-muted/20 p-3 md:col-span-2 xl:col-span-4">
           <input type="checkbox" checked={includeCompetitors} onChange={(e) => setIncludeCompetitors(e.target.checked)} className="mt-1 h-4 w-4" />
           <span>
             <span className="block text-sm font-medium">Include competitors and peer companies</span>
-            <span className="block text-xs text-muted-foreground">For a named business, include direct competitors. For an industry search, include competing operators in that market.</span>
+            <span className="block text-xs text-muted-foreground">For name-only research, look for comparable companies in the selected location and industry. Each result links to a public source.</span>
           </span>
         </label>
+
+        <details className="min-w-0 rounded-md border bg-muted/10 p-3 md:col-span-2 xl:col-span-4">
+          <summary className="cursor-pointer text-sm font-medium">Optional: use your own website to discover customers and draft outreach</summary>
+          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={useWebsiteMode} onChange={(e) => setUseWebsiteMode(e.target.checked)} className="h-4 w-4" /> Use my website for prospect outreach</label>
+          <p className="mt-2 text-xs text-muted-foreground">Enable the checkbox to switch workflows. If it is off, the search uses the business name above even if an old website is saved here.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="p-name">Your name (for outreach)</Label>
+          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-email">Your email (for outreach)</Label>
+          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-site">Your own business website (for outreach)</Label>
+          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+
+          </div>
+          {useWebsiteMode && website.trim() && (
+            <div className="mt-4">
         <div className="space-y-1.5 md:col-span-2 xl:col-span-4">
           <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
           <Textarea
@@ -410,17 +451,23 @@ function ProspectPage() {
             Facts you personally approve for this sender, e.g. runs alongside existing tools; setup takes about five minutes. Saved for {domainKey || "this website"} only.
           </p>
         </div>
+
+            </div>
+          )}
+        </details>
         <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
+          {!useWebsiteMode ? "Research business" : businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
         </Button>
       </form>
 
       {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
-      {phase !== "idle" && (
+      {namedResult && <NameResearchPanel result={namedResult} />}
+
+      {phase !== "idle" && !namedResult && (
         <ol className="mt-6 flex flex-wrap gap-2 font-mono text-xs">
-          <Step label="1. Analyze website" state={phase === "analyzing" ? "active" : analysis ? "done" : "todo"} />
+          <Step label={useWebsiteMode ? "1. Analyze website" : "1. Search public sources"} state={phase === "analyzing" ? "active" : analysis ? "done" : "todo"} />
           <Step label="2. Discover companies" state={phase === "discovering" ? "active" : rows.length ? "done" : "todo"} />
           <Step
             label={`3. Find contacts & draft (${doneCount}/${rows.length})`}
@@ -488,7 +535,7 @@ function ProspectPage() {
       )}
 
       <p className="mt-8 text-xs text-muted-foreground">
-        Companies are suggested by AI and checked to have a live website. Research is saved into a persistent prospect dossier so evidence, triggers and follow-up drafts are not lost. Contacts and emails come only from each company's public web pages. Nothing is
+        Website-based outreach checks suggested company websites and saves dossiers. Business-name research instead uses public search listings, allows a blank website and saves selected companies directly to your CRM. Competitor relationships are leads until verified. Nothing is
         sent from this app — review each email and send it from your own mail app. Follow local rules for cold outreach (e.g. GDPR/CAN-SPAM) and honor
         opt-out replies.
       </p>
