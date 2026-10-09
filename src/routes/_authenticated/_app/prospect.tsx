@@ -71,6 +71,7 @@ function ProspectPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(ws.email);
   const [website, setWebsite] = useState("");
+  const [useWebsiteMode, setUseWebsiteMode] = useState(false);
   const [businessQuery, setBusinessQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
   const [namedResult, setNamedResult] = useState<NamedBusinessResearch | null>(null);
@@ -200,7 +201,7 @@ function ProspectPage() {
   async function start(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const hasSite = Boolean(website.trim());
+    const hasSite = useWebsiteMode;
     if (hasSite && !normalizeWebsite(website)) return setError("Enter a valid website or leave the field blank.");
     if (!hasSite && !businessQuery.trim()) return setError("Enter a business name to search without a website.");
     if (hasSite && !sender.name) return setError("Enter your name for the outreach workflow.");
@@ -416,7 +417,8 @@ function ProspectPage() {
 
         <details className="min-w-0 rounded-md border bg-muted/10 p-3 md:col-span-2 xl:col-span-4">
           <summary className="cursor-pointer text-sm font-medium">Optional: use your own website to discover customers and draft outreach</summary>
-          <p className="mt-2 text-xs text-muted-foreground">Adding your own website switches to the existing website-based prospect and outreach search. Leave it empty to research the named business above.</p>
+          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={useWebsiteMode} onChange={(e) => setUseWebsiteMode(e.target.checked)} className="h-4 w-4" /> Use my website for prospect outreach</label>
+          <p className="mt-2 text-xs text-muted-foreground">Enable the checkbox to switch workflows. If it is off, the search uses the business name above even if an old website is saved here.</p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="p-name">Your name (for outreach)</Label>
@@ -432,7 +434,7 @@ function ProspectPage() {
         </div>
 
           </div>
-          {website.trim() && (
+          {useWebsiteMode && website.trim() && (
             <div className="mt-4">
         <div className="space-y-1.5 md:col-span-2 xl:col-span-4">
           <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
@@ -452,9 +454,10 @@ function ProspectPage() {
 
             </div>
           )}
-        </details>        <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
+        </details>
+        <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {!website.trim() ? "Research business" : businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
+          {!useWebsiteMode ? "Research business" : businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
         </Button>
       </form>
 
@@ -464,7 +467,7 @@ function ProspectPage() {
 
       {phase !== "idle" && !namedResult && (
         <ol className="mt-6 flex flex-wrap gap-2 font-mono text-xs">
-          <Step label={website.trim() ? "1. Analyze website" : "1. Search public sources"} state={phase === "analyzing" ? "active" : analysis ? "done" : "todo"} />
+          <Step label={useWebsiteMode ? "1. Analyze website" : "1. Search public sources"} state={phase === "analyzing" ? "active" : analysis ? "done" : "todo"} />
           <Step label="2. Discover companies" state={phase === "discovering" ? "active" : rows.length ? "done" : "todo"} />
           <Step
             label={`3. Find contacts & draft (${doneCount}/${rows.length})`}
