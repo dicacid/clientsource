@@ -28,6 +28,7 @@ export const Route = createFileRoute("/_authenticated/_app/members")({
 
 function Members() {
   const ws = useWorkspace();
+  const guest = ws.userId === "guest";
   const qc = useQueryClient();
   const isOwner = ws.role === "owner";
   const isAdmin = ws.role === "owner" || ws.role === "admin";
@@ -113,7 +114,8 @@ function Members() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Members" sub={`Your role: ${label(ws.role)}`} />
+      <PageHeader title="Members" sub={guest ? "Free private browser-tab workspace" : `Your role: ${label(ws.role)}`} />
+      {guest && <p className="mb-5 rounded-md border p-4 text-sm text-muted-foreground">You can use all the research and CRM tools anonymously. Guest data is stored only in this browser tab. Sharing a live workspace between devices requires an identified team account so other people cannot access your private leads.</p>}
 
       {isAdmin && (
         <section className="mb-8 rounded-lg border bg-card p-5">
