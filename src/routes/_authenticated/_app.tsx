@@ -2,10 +2,18 @@ import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Target, PartyPopper, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut, Settings } from "lucide-react";
 import { resolveMembership, signOut } from "@/lib/session";
+import { renderDb } from "@/integrations/render/client";
 import { label } from "@/lib/constants";
 
 export const Route = createFileRoute("/_authenticated/_app")({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
+    // Only /prospect is open to guests; all private routes keep membership checks.
+    if (location.pathname === "/prospect") {
+      const { data } = await renderDb.auth.getUser();
+      if (!data.user) {
+        return { membership: { organizationId: "guest", orgName: "Free research", role: "member" as const, userId: "guest", email: "" } };
+      }
+    }
     const r = await resolveMembership();
     if (r.state !== "member") throw redirect({ to: "/onboarding" });
     return { membership: r.membership };
@@ -27,6 +35,8 @@ const NAV = [
 
 function AppLayout() {
   const { membership } = Route.useRouteContext();
+  const guest = membership.userId === "guest";
+  const visibleNav = guest ? NAV.filter((entry) => entry.to === "/prospect") : NAV;
   const qc = useQueryClient();
   const navigate = useNavigate();
 
@@ -43,12 +53,12 @@ function AppLayout() {
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">Prospect Finder B2B</div>
             <div className="truncate text-sm font-semibold">{membership.orgName}</div>
           </div>
-          <button onClick={out} className="text-muted-foreground hover:text-foreground md:hidden" aria-label="Sign out">
+          {!guest && <button onClick={out} className="text-muted-foreground hover:text-foreground md:hidden" aria-label="Sign out">
             <LogOut className="h-4 w-4" />
-          </button>
+          </button>}
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-0">
-          {NAV.map((n) => (
+          {visibleNav.map((n) => (
             <Link
               key={n.to}
               to={n.to}
@@ -60,13 +70,13 @@ function AppLayout() {
             </Link>
           ))}
         </nav>
-        <div className="absolute bottom-0 hidden w-56 border-t p-4 md:block">
+        {!guest && <div className="absolute bottom-0 hidden w-56 border-t p-4 md:block">
           <div className="truncate text-xs text-muted-foreground">{membership.email}</div>
           <div className="mb-2 font-mono text-[10px] uppercase text-primary">{label(membership.role)}</div>
           <button onClick={out} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <LogOut className="h-4 w-4" /> Sign out
           </button>
-        </div>
+        </div>}
       </aside>
       <main className="min-w-0 flex-1 p-4 md:p-8">
         <Outlet />
