@@ -154,7 +154,7 @@ function WelcomePage() {
                 Prospect Finder B2B helps small businesses, freelancers and sales teams research other companies, investigate competitors and identify potential customers using public information.
               </p>
               <p className="mt-4 max-w-xl text-sm leading-6 text-foreground/85">
-                Know the business name but not its website? That's fine. Start with a name, a location or an industry.
+                Know the business name but not its website? That's fine. Start with a business name, then optionally narrow the search by location or industry.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link
@@ -258,7 +258,7 @@ function WelcomePage() {
             <SectionLabel>02 / How to use it</SectionLabel>
             <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Your first search, in four steps.</h2>
             <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-              No technical setup. Start with a business you want to learn about or an industry you want to explore.
+              No technical setup. Start with a business you want to learn about, then use the location and industry fields to focus the search.
             </p>
             <ol className="mt-9 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {steps.map((step) => (
