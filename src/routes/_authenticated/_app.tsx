@@ -7,8 +7,8 @@ import { label } from "@/lib/constants";
 
 export const Route = createFileRoute("/_authenticated/_app")({
   beforeLoad: async ({ location }) => {
-    // Only /prospect is open to guests; all private routes keep membership checks.
-    if (location.pathname === "/prospect") {
+    // Anonymous guests see the full application with isolated local data.
+    if (["/prospect", "/prospects", "/party", "/dashboard", "/companies", "/contacts", "/import", "/members", "/settings"].includes(location.pathname)) {
       const { data } = await renderDb.auth.getUser();
       if (!data.user) {
         return { membership: { organizationId: "guest", orgName: "Free research", role: "member" as const, userId: "guest", email: "" } };
@@ -36,7 +36,7 @@ const NAV = [
 function AppLayout() {
   const { membership } = Route.useRouteContext();
   const guest = membership.userId === "guest";
-  const visibleNav = guest ? NAV.filter((entry) => entry.to === "/prospect") : NAV;
+  const visibleNav = NAV;
   const qc = useQueryClient();
   const navigate = useNavigate();
 
@@ -57,7 +57,7 @@ function AppLayout() {
             <LogOut className="h-4 w-4" />
           </button>}
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-0">
+        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-0" aria-label="Main navigation">
           {visibleNav.map((n) => (
             <Link
               key={n.to}
@@ -79,6 +79,7 @@ function AppLayout() {
         </div>}
       </aside>
       <main className="min-w-0 flex-1 p-4 md:p-8">
+        {guest && <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">Free guest workspace: your companies, contacts and research are private to this browser tab. Export anything you need before closing it.</div>}
         <Outlet />
       </main>
     </div>
