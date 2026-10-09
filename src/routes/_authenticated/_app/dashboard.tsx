@@ -80,7 +80,7 @@ function Dashboard() {
         <p className="text-destructive">{friendlyError(q.error)}</p>
       ) : q.data!.companies === 0 ? (
         <EmptyState
-          title="No prospects yet. Enter your name, email and website in the Prospect finder, then save the companies you want to pursue."
+          title="No prospects yet. Research a company by name or industry in Prospect finder, then save businesses to your workspace."
           action={
             <Button asChild>
               <Link to="/prospect">Open Prospect finder</Link>
