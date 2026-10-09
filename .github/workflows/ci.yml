@@ -26,5 +26,5 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - run: node --experimental-strip-types --test --test-force-exit tests/account-isolation.test.mjs tests/named-search.test.mjs tests/guest-store.test.mjs
+      - run: node --experimental-strip-types --test --test-force-exit tests/account-isolation.test.mjs tests/named-search.test.mjs tests/guest-store.test.mjs tests/public-welcome.test.mjs
       - run: npm run build
