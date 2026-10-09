@@ -34,7 +34,7 @@ function errorResult(message: string) {
 function load(): GuestState {
   try {
     const s = sessionStorage.getItem(KEY);
-    return s ? JSON.parse(s) as GuestState : fallbackState;
+    return s ? JSON.parse(s) as GuestState : {};
   } catch {
     return fallbackState;
   }
