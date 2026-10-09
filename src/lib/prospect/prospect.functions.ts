@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireRenderMember } from "@/integrations/render/auth-middleware";
+import { allowPublicResearch } from "@/integrations/render/auth-middleware";
 import { prospectFeedbackForOrganization } from "@/integrations/render/state.server";
 import { aiJson, AiError } from "./ai.server";
 import { extractEmails, extractLinks, fetchPage, fetchText, hostOf, htmlToText, pageMeta, rankedLinks } from "./web.server";
@@ -127,7 +127,7 @@ const SENDER_KEYWORDS = ["pricing", "plans", "features", "product", "platform", 
 const TARGET_KEYWORDS = ["about", "services", "products", "solutions", "team", "careers", "jobs", "case-studies", "clients", "contact", "pricing", "industries", "projects", "portfolio", "work", "service"];
 
 export const analyzeBusiness = createServerFn({ method: "POST" })
-  .middleware([requireRenderMember])
+  .middleware([allowPublicResearch])
   .inputValidator((d: unknown) => z.object({ website: z.string().min(3).max(300) }).parse(d))
   .handler(({ data, context }) =>
     wrap(async () => {
@@ -161,7 +161,7 @@ export const analyzeBusiness = createServerFn({ method: "POST" })
   );
 
 export const discoverTargets = createServerFn({ method: "POST" })
-  .middleware([requireRenderMember])
+  .middleware([allowPublicResearch])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -178,7 +178,9 @@ export const discoverTargets = createServerFn({ method: "POST" })
   .handler(({ data, context }) =>
     wrap(async () => {
       await assertMember(context);
-      const feedback = await prospectFeedbackForOrganization(context.organizationId, context.userId);
+      const feedback = context.userId === "guest"
+        ? { samples: 0, positiveIndustries: [], positiveEmployeeRanges: [], negativeIndustries: [] }
+        : await prospectFeedbackForOrganization(context.organizationId, context.userId);
       const feedbackHint =
         feedback.samples >= 3
           ? `\nWorkspace outcome feedback (use only as a tie-breaker after product fit): positive industries: ${feedback.positiveIndustries.join(", ") || "none"}; positive company sizes: ${feedback.positiveEmployeeRanges.join(", ") || "none"}; repeatedly not-relevant industries: ${feedback.negativeIndustries.join(", ") || "none"}.`
@@ -247,7 +249,7 @@ const targetSchema = z.object({
 });
 
 export const researchAndDraft = createServerFn({ method: "POST" })
-  .middleware([requireRenderMember])
+  .middleware([allowPublicResearch])
   .inputValidator((d: unknown) =>
     z
       .object({
