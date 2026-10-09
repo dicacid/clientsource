@@ -5,7 +5,9 @@ export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ location }) => {
     const { data, error } = await renderDb.auth.getUser();
-    if (location.pathname === "/prospect" && !data.user && (!error || isAuthFailure(error))) {
+    // All app routes are free to use; onboarding remains available only to signed-in users.
+    const guestRoutes = ["/prospect", "/prospects", "/party", "/dashboard", "/companies", "/contacts", "/import", "/members", "/settings"];
+    if (guestRoutes.includes(location.pathname) && !data.user && (!error || isAuthFailure(error))) {
       return { user: null };
     }
     if (error) {

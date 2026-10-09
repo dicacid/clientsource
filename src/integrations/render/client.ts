@@ -1,4 +1,5 @@
 import { authRequest, currentUserRequest, dbRequest, rpcRequest } from "./server.functions";
+import { executeGuestRequest } from "./guest-store";
 
 const STORAGE_KEY = "clientsource.session";
 type AuthEvent = "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED";
@@ -156,6 +157,7 @@ class QueryBuilder implements PromiseLike<any> {
 
   private async execute() {
     try {
+      if (!token()) return executeGuestRequest(this.request);
       return await dbRequest({ data: this.request });
     } catch (error) {
       return { data: null, error: err(error), count: null };

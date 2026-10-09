@@ -124,8 +124,7 @@ function ProspectPage() {
   const sender = { name: name.trim(), email: email.trim() };
 
   async function persistDossier(target: Target, result: ContactResult, senderWebsite: string) {
-    // Anonymous research is session-only; never write it into another person's CRM.
-    if (guest) return "";
+    // Authenticated users save on the server; guests save only in their own browser tab.
     const now = new Date().toISOString();
     const base = {
       company_name: target.name,
@@ -313,7 +312,6 @@ function ProspectPage() {
   }
 
   async function save(i: number) {
-    if (guest) return;
     const row = rows[i]!;
     const res = row.result!;
     const site = normalizeWebsite(row.domain);
@@ -383,7 +381,7 @@ function ProspectPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Free business research" sub="No account, signup or website required. Research a business, find possible competitors, or analyse your website to discover prospects." />
-      {guest && <p className="mb-5 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">Free public access. Results are private to this browser tab and are not stored in a shared workspace. No registration or payment required.</p>}
+
 
       <form onSubmit={start} className="grid gap-5 rounded-lg border bg-card p-5 md:grid-cols-2 xl:grid-cols-4">
         <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-4">Enter a business name to look for public information and competitors. No website or contact details needed.</p>
@@ -528,7 +526,7 @@ function ProspectPage() {
               key={r.domain}
               row={r}
               onChange={(p) => updateDraft(i, p)}
-              onSave={guest ? undefined : () => save(i)}
+              onSave={() => save(i)}
               onRetry={() => retry(i)}
             />
           ))}
@@ -541,7 +539,7 @@ function ProspectPage() {
       )}
 
       <p className="mt-8 text-xs text-muted-foreground">
-        Website-based outreach checks suggested company websites{guest ? " and shows results in this tab" : " and saves dossiers to your private CRM"}. Business-name research uses public search listings and allows a blank website{guest ? "" : " and saves selected companies to your CRM"}. Competitor relationships are leads until verified. Nothing is
+        Website-based outreach checks suggested company websites and saves dossiers to your workspace. Business-name research uses public search listings, allows a blank website and saves selected companies to your workspace. Guest data remains in this browser tab. Competitor relationships are leads until verified. Nothing is
         sent from this app — review each email and send it from your own mail app. Follow local rules for cold outreach (e.g. GDPR/CAN-SPAM) and honor
         opt-out replies.
       </p>

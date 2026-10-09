@@ -1,14 +1,15 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Target, PartyPopper, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut, Settings } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, Target, PartyPopper, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut, Settings, Menu, X } from "lucide-react";
 import { resolveMembership, signOut } from "@/lib/session";
 import { renderDb } from "@/integrations/render/client";
 import { label } from "@/lib/constants";
 
 export const Route = createFileRoute("/_authenticated/_app")({
   beforeLoad: async ({ location }) => {
-    // Only /prospect is open to guests; all private routes keep membership checks.
-    if (location.pathname === "/prospect") {
+    // Anonymous guests see the full application with isolated local data.
+    if (["/prospect", "/prospects", "/party", "/dashboard", "/companies", "/contacts", "/import", "/members", "/settings"].includes(location.pathname)) {
       const { data } = await renderDb.auth.getUser();
       if (!data.user) {
         return { membership: { organizationId: "guest", orgName: "Free research", role: "member" as const, userId: "guest", email: "" } };
@@ -36,7 +37,8 @@ const NAV = [
 function AppLayout() {
   const { membership } = Route.useRouteContext();
   const guest = membership.userId === "guest";
-  const visibleNav = guest ? NAV.filter((entry) => entry.to === "/prospect") : NAV;
+  const visibleNav = NAV;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const qc = useQueryClient();
   const navigate = useNavigate();
 
@@ -57,11 +59,22 @@ function AppLayout() {
             <LogOut className="h-4 w-4" />
           </button>}
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-0">
+        <button
+          type="button"
+          className="mx-3 mb-2 flex w-[calc(100%-1.5rem)] items-center justify-between rounded-md border px-3 py-2 text-sm md:hidden"
+          aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen(value => !value)}
+        >
+          <span className="flex items-center gap-2">{mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />} All tools and sections</span>
+          <span className="font-mono text-xs text-muted-foreground">{NAV.length}</span>
+        </button>
+        <nav className={`${mobileMenuOpen ? "flex" : "hidden"} max-h-[65vh] flex-col gap-1 overflow-y-auto px-2 pb-2 md:flex md:max-h-none md:flex-col md:overflow-visible md:pb-0`} aria-label="Main navigation">
           {visibleNav.map((n) => (
             <Link
               key={n.to}
               to={n.to}
+              onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               activeProps={{ className: "bg-sidebar-accent text-sidebar-foreground font-medium" }}
             >
@@ -79,6 +92,7 @@ function AppLayout() {
         </div>}
       </aside>
       <main className="min-w-0 flex-1 p-4 md:p-8">
+        {guest && <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">Free guest workspace: your companies, contacts and research are private to this browser tab. Export anything you need before closing it.</div>}
         <Outlet />
       </main>
     </div>
