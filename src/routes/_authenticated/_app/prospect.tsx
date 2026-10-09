@@ -379,18 +379,7 @@ function ProspectPage() {
       <PageHeader title="Prospect finder" sub="Search by business name and location, even when there is no website. Or enter your own website to run the existing outreach workflow." />
 
       <form onSubmit={start} className="grid gap-5 rounded-lg border bg-card p-5 md:grid-cols-2 xl:grid-cols-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="p-name">Your name (for outreach)</Label>
-          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-email">Your email (for outreach)</Label>
-          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="p-site">Your website (optional)</Label>
-          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
-        </div>
+        <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-4">Enter a business name to look for public information and competitors. No website or contact details needed.</p>
         <div className="space-y-1.5">
           <Label htmlFor="p-business-query">Business to research (name)</Label>
           <Input id="p-business-query" value={businessQuery} onChange={(e) => setBusinessQuery(e.target.value)} placeholder="e.g. Butlers Events Hire" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
@@ -416,6 +405,7 @@ function ProspectPage() {
             </SelectContent>
           </Select>
         </div>
+
         <label className="flex items-start gap-3 border bg-muted/20 p-3 md:col-span-2 xl:col-span-4">
           <input type="checkbox" checked={includeCompetitors} onChange={(e) => setIncludeCompetitors(e.target.checked)} className="mt-1 h-4 w-4" />
           <span>
@@ -423,6 +413,27 @@ function ProspectPage() {
             <span className="block text-xs text-muted-foreground">For name-only research, look for comparable companies in the selected location and industry. Each result links to a public source.</span>
           </span>
         </label>
+
+        <details className="min-w-0 rounded-md border bg-muted/10 p-3 md:col-span-2 xl:col-span-4">
+          <summary className="cursor-pointer text-sm font-medium">Optional: use your own website to discover customers and draft outreach</summary>
+          <p className="mt-2 text-xs text-muted-foreground">Adding your own website switches to the existing website-based prospect and outreach search. Leave it empty to research the named business above.</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="p-name">Your name (for outreach)</Label>
+          <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-email">Your email (for outreach)</Label>
+          <Input id="p-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="p-site">Your own business website (for outreach)</Label>
+          <Input id="p-site" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="example.com" className="h-11 min-w-0 border-border/90 bg-background/70 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/30" />
+        </div>
+
+          </div>
+          {website.trim() && (
+            <div className="mt-4">
         <div className="space-y-1.5 md:col-span-2 xl:col-span-4">
           <Label htmlFor="p-claims">Approved campaign claims (optional)</Label>
           <Textarea
@@ -438,7 +449,10 @@ function ProspectPage() {
             Facts you personally approve for this sender, e.g. runs alongside existing tools; setup takes about five minutes. Saved for {domainKey || "this website"} only.
           </p>
         </div>
-        <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
+
+            </div>
+          )}
+        </details>        <Button type="submit" disabled={busy} className="h-11 w-full gap-2 md:col-start-2 md:w-auto md:justify-self-end xl:col-start-4">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {!website.trim() ? "Research business" : businessQuery.trim() || industryQuery.trim() ? "Search market" : "Find prospects"}
         </Button>
