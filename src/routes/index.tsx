@@ -3,10 +3,10 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Prospect Finder B2B — Team prospecting workspace" },
-      { name: "description", content: "Private prospecting workspace for your sales team." },
-      { property: "og:title", content: "Prospect Finder B2B — Team prospecting workspace" },
-      { property: "og:description", content: "Private prospecting workspace for your sales team." },
+      { title: "Prospect Finder B2B — Free business and competitor research" },
+      { name: "description", content: "Free business research and competitor discovery. No account or website required." },
+      { property: "og:title", content: "Prospect Finder B2B — Free business and competitor research" },
+      { property: "og:description", content: "Free business research and competitor discovery. No account or website required." },
     ],
   }),
   beforeLoad: () => {
