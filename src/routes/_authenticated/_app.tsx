@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Sparkles, Target, PartyPopper, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut, Settings, Menu, X } from "lucide-react";
+import { Sparkles, Target, PartyPopper, LayoutDashboard, Building2, Users, UserCog, FileUp, LogOut, Settings, Menu, X, House } from "lucide-react";
 import { resolveMembership, signOut } from "@/lib/session";
 import { renderDb } from "@/integrations/render/client";
 import { label } from "@/lib/constants";
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/_authenticated/_app")({
 });
 
 const NAV = [
+  { to: "/", label: "Home / guide", icon: House },
   { to: "/prospect", label: "Prospect finder", icon: Sparkles },
   { to: "/prospects", label: "Prospect intelligence", icon: Target },
   { to: "/party", label: "Party mode", icon: PartyPopper },
