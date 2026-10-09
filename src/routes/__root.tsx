@@ -74,11 +74,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Prospect Finder B2B — Team prospecting workspace" },
-      { name: "description", content: "Private workspace for a sales team to track target companies, contacts and pipeline." },
+      { title: "Prospect Finder B2B — Free business research" },
+      { name: "description", content: "Research businesses and competitors for free. No signup, login or website required." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "robots", content: "noindex" },
+      { name: "robots", content: "index, follow" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
