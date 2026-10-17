@@ -715,6 +715,7 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
       if (fn === "workspace_exists") return state.organizations.length > 0;
 
       if (fn === "claim_invite") {
+        if (!user.email_verified_at) throw dbError("EMAIL_NOT_CONFIRMED", "42501");
         ensureCompanyMembership(state, user);
         if (memberFor(state, userId)) return null;
         const invite = state.pending_invites.find((i) => i.email === user.email);
@@ -730,6 +731,7 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
       }
 
       if (fn === "create_workspace") {
+        if (!user.email_verified_at) throw dbError("EMAIL_NOT_CONFIRMED", "42501");
         const name = String(args["org_name"] ?? "").trim();
         if (!name) throw dbError("NAME_REQUIRED");
         if (memberFor(state, userId)) throw dbError("ALREADY_MEMBER");
