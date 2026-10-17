@@ -12,9 +12,15 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in — SPA Intelligence" },
-      { name: "description", content: "Private commercial intelligence for Solar Power Australia." },
+      {
+        name: "description",
+        content: "Private commercial intelligence for Solar Power Australia.",
+      },
       { property: "og:title", content: "Sign in — SPA Intelligence" },
-      { property: "og:description", content: "Sign in to SPA Intelligence with your company email." },
+      {
+        property: "og:description",
+        content: "Sign in to SPA Intelligence with your company email.",
+      },
     ],
   }),
   component: AuthPage,
@@ -41,7 +47,9 @@ function AuthPage() {
       setBusy(true);
       try {
         await requestPasswordResetRequest({ data: { email: email.trim() } });
-        setInfo("If that email belongs to an account, a password reset link has been sent. The link is valid for 30 minutes.");
+        setInfo(
+          "If that email belongs to an account, a password reset link has been sent. The link is valid for 30 minutes.",
+        );
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -73,9 +81,11 @@ function AuthPage() {
   }
 
   const heading =
-    mode === "signin" ? "Sign in to SPA Intelligence" :
-    mode === "signup" ? "Create your account" :
-    "Reset your password";
+    mode === "signin"
+      ? "Sign in to SPA Intelligence"
+      : mode === "signup"
+        ? "Create your account"
+        : "Reset your password";
 
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4">
@@ -86,7 +96,9 @@ function AuthPage() {
             alt="Solar Power Australia"
             className="mb-5 h-12 w-auto bg-white p-1"
           />
-          <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">SPA Intelligence</div>
+          <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+            SPA Intelligence
+          </div>
           <h1 className="mt-2 text-2xl font-semibold">{heading}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {mode === "forgot"
@@ -95,8 +107,8 @@ function AuthPage() {
           </p>
           {mode !== "forgot" && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Automatic access for RevealingMindAI.org, SolarOnline.com.au,
-              SolarPowerAustralia.com.au and Elmofo.com.au emails.
+              New accounts must verify their email before workspace access. Approved company domains
+              can join automatically after verification.
             </p>
           )}
         </div>
@@ -105,7 +117,12 @@ function AuthPage() {
           {mode === "signup" && (
             <div className="space-y-1.5">
               <Label htmlFor="name">Full name</Label>
-              <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
+              <Input
+                id="name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoComplete="name"
+              />
             </div>
           )}
 

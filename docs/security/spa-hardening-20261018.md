@@ -1,5 +1,7 @@
 # SPA Intelligence security hardening review — 2026-10-18
 
+> Historical baseline review. See [the continuation and production release proposal](spa-hardening-release-proposal-20261018.md) for implemented fixes, current validation results and remaining release gates. Statements below describe the original review, not the final branch behavior.
+
 ## Production baseline and rollback
 
 - Render service: spa-intelligence (srv-daukeo59fdbs739aevc0)

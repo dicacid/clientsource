@@ -8,11 +8,18 @@ export async function signOut(queryClient: QueryClient) {
   await renderDb.auth.signOut();
 }
 
-export type Membership = { organizationId: string; orgName: string; role: Role; userId: string; email: string };
+export type Membership = {
+  organizationId: string;
+  orgName: string;
+  role: Role;
+  userId: string;
+  email: string;
+};
 
 /** Resolve automatic company access or an explicit invitation after authentication. */
 export async function resolveMembership(): Promise<
   | { state: "member"; membership: Membership }
+  | { state: "verify_email" }
   | { state: "no_org" }
   | { state: "not_invited" }
 > {
@@ -20,7 +27,10 @@ export async function resolveMembership(): Promise<
   const user = u.user;
   if (!user) throw new Error("Not signed in");
   const { error: claimErr } = await renderDb.rpc("claim_invite");
-  if (claimErr) throw claimErr;
+  if (claimErr) {
+    if (claimErr.message === "EMAIL_NOT_CONFIRMED") return { state: "verify_email" };
+    throw claimErr;
+  }
   const { data: m, error } = await renderDb
     .from("organization_members")
     .select("organization_id, role, organizations(name)")

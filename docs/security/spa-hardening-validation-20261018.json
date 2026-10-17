@@ -1,0 +1,65 @@
+{
+  "starting_commit": "dc545c81947e4779b701a9d4b3f5ad91fc4e3a78",
+  "runtime": {
+    "node": "v24.19.0",
+    "npm": "11.9.0"
+  },
+  "isolation": "Fresh checkout, env -i, synthetic fixtures, mocked Redis transport/mail/dispatch; no real credentials/customer data.",
+  "tests": {
+    "total": 79,
+    "passed": 79,
+    "failed": 0,
+    "exit_code": 0
+  },
+  "typecheck": {
+    "exit_code": 0
+  },
+  "build": {
+    "exit_code": 0,
+    "includes_tests": true
+  },
+  "lint": {
+    "exit_code": 1,
+    "errors": 1557,
+    "warnings": 15,
+    "baseline_errors": 1657,
+    "baseline_warnings": 15,
+    "new_diagnostics": []
+  },
+  "workflow_lint": {
+    "exit_code": 0,
+    "excludes_state_module_existing_typing_debt": true
+  },
+  "http_smoke": {
+    "checks": [
+      {
+        "path": "/auth",
+        "status": 200,
+        "expected_text_present": true
+      },
+      {
+        "path": "/verify-email",
+        "status": 200,
+        "expected_text_present": true
+      },
+      {
+        "path": "/health",
+        "status": 500,
+        "expected_text_present": null
+      }
+    ],
+    "public_bundle_secret_scan": "passed",
+    "limitations": "HTTP/SSR only. Browser hydration blocked because Chromium is absent and its download returned an invalid ZIP. No live Redis, real email delivery, authenticated browser flow or production requests."
+  },
+  "git_diff_check": {
+    "exit_code": 0
+  },
+  "production_actions": {
+    "deployed": false,
+    "merged": false,
+    "customer_data_modified": false,
+    "infrastructure_changed": false,
+    "real_mail_sent": false
+  },
+  "release_recommendation": "Blocked pending full lint/exception, Node 22 CI, actual Redis tests, approved mail transport and browser end-to-end validation, live readiness checks, and explicit release approval."
+}

@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedAppCapabilitiesRouteImport } from './routes/_authenticated/_app/capabilities'
@@ -52,6 +53,11 @@ const HealthRoute = HealthRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
@@ -142,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/health': typeof HealthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/capabilities': typeof AuthenticatedAppCapabilitiesRoute
   '/companies': typeof AuthenticatedAppCompaniesRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/health': typeof HealthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/capabilities': typeof AuthenticatedAppCapabilitiesRoute
   '/companies': typeof AuthenticatedAppCompaniesRoute
@@ -184,6 +192,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/health': typeof HealthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/_app/capabilities': typeof AuthenticatedAppCapabilitiesRoute
@@ -207,6 +216,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/health'
     | '/reset-password'
+    | '/verify-email'
     | '/onboarding'
     | '/capabilities'
     | '/companies'
@@ -227,6 +237,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/health'
     | '/reset-password'
+    | '/verify-email'
     | '/onboarding'
     | '/capabilities'
     | '/companies'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/health'
     | '/reset-password'
+    | '/verify-email'
     | '/_authenticated/_app'
     | '/_authenticated/onboarding'
     | '/_authenticated/_app/capabilities'
@@ -271,6 +283,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   HealthRoute: typeof HealthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ApiTendersCronRoute: typeof ApiTendersCronRoute
   ApiTendersSourceHealthRoute: typeof ApiTendersSourceHealthRoute
 }
@@ -310,6 +323,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/_app': {
@@ -482,6 +502,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   HealthRoute: HealthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ApiTendersCronRoute: ApiTendersCronRoute,
   ApiTendersSourceHealthRoute: ApiTendersSourceHealthRoute,
 }

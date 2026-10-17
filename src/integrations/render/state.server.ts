@@ -5,11 +5,29 @@ import { hasAutomaticCompanyAccess } from "../../lib/company-access";
 const STATE_KEY = process.env["STATE_KEY"] || "spa-intelligence:state:v1";
 
 type Role = "owner" | "admin" | "member";
-type User = { id: string; email: string; password_hash: string; created_at: string; email_verified_at?: string | null };
+type User = {
+  id: string;
+  email: string;
+  password_hash: string;
+  created_at: string;
+  email_verified_at?: string | null;
+};
 type Profile = { id: string; full_name: string | null; created_at: string };
 type Organization = { id: string; name: string; created_at: string };
-type OrganizationMember = { organization_id: string; user_id: string; role: Role; created_at: string };
-type PendingInvite = { id: string; organization_id: string; email: string; role: "admin" | "member"; invited_by: string; created_at: string };
+type OrganizationMember = {
+  organization_id: string;
+  user_id: string;
+  role: Role;
+  created_at: string;
+};
+type PendingInvite = {
+  id: string;
+  organization_id: string;
+  email: string;
+  role: "admin" | "member";
+  invited_by: string;
+  created_at: string;
+};
 type Company = {
   id: string;
   organization_id: string;
@@ -101,7 +119,17 @@ type Filter = {
 type Order = { column: string; ascending: boolean; nullsFirst?: boolean };
 
 export type DbRequest = {
-  table: keyof Pick<State, "profiles" | "organizations" | "organization_members" | "pending_invites" | "companies" | "contacts" | "activities" | "prospect_dossiers">;
+  table: keyof Pick<
+    State,
+    | "profiles"
+    | "organizations"
+    | "organization_members"
+    | "pending_invites"
+    | "companies"
+    | "contacts"
+    | "activities"
+    | "prospect_dossiers"
+  >;
   action: "select" | "insert" | "update" | "delete";
   payload?: unknown;
   filters?: Filter[];
@@ -250,12 +278,19 @@ function publicUser(user: User) {
 
 export async function signUp(email: string, password: string, fullName: string) {
   const normalized = normalizeEmail(email);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new Error("Enter a valid email address.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
+    throw new Error("Enter a valid email address.");
   if (password.length < 8) throw new Error("Password must be at least 8 characters.");
   return mutateState((state) => {
-    if (state.users.some((u) => u.email === normalized)) throw new Error("An account with that email already exists.");
+    if (state.users.some((u) => u.email === normalized))
+      throw new Error("An account with that email already exists.");
     const created_at = new Date().toISOString();
-    const user: User = { id: randomUUID(), email: normalized, password_hash: hashPassword(password), created_at };
+    const user: User = {
+      id: randomUUID(),
+      email: normalized,
+      password_hash: hashPassword(password),
+      created_at,
+    };
     state.users.push(user);
     state.profiles.push({ id: user.id, full_name: fullName.trim() || null, created_at });
     return { user: publicUser(user) };
@@ -265,15 +300,16 @@ export async function signUp(email: string, password: string, fullName: string) 
 export async function signIn(email: string, password: string) {
   return mutateState((state) => {
     const user = state.users.find((u) => u.email === normalizeEmail(email));
-    if (!user || !verifyPassword(password, user.password_hash)) throw new Error("Invalid email or password.");
+    if (!user || !verifyPassword(password, user.password_hash))
+      throw new Error("Invalid email or password.");
     ensureCompanyMembership(state, user);
     return { user: publicUser(user), access_token: signToken(user) };
   });
 }
 
 export async function markVerifiedEmail(userId: string): Promise<void> {
-  await mutateState(state => {
-    const user = state.users.find(u => u.id === userId);
+  await mutateState((state) => {
+    const user = state.users.find((u) => u.id === userId);
     if (!user) throw new Error("Invalid verification request.");
     user.email_verified_at ??= new Date().toISOString();
   });
@@ -292,11 +328,13 @@ function memberFor(state: State, userId: string) {
 /** Keep data scoped internally while approved company accounts join automatically. */
 function ensureCompanyMembership(state: State, user: User) {
   const existing = memberFor(state, user.id);
-  if (existing || !user.email_verified_at || !hasAutomaticCompanyAccess(user.email)) return existing;
+  if (existing || !user.email_verified_at || !hasAutomaticCompanyAccess(user.email))
+    return existing;
 
-  const invite = state.pending_invites.find((i) =>
-    normalizeEmail(i.email) === normalizeEmail(user.email) &&
-    state.organizations.some((org) => org.id === i.organization_id),
+  const invite = state.pending_invites.find(
+    (i) =>
+      normalizeEmail(i.email) === normalizeEmail(user.email) &&
+      state.organizations.some((org) => org.id === i.organization_id),
   );
   let organization = invite
     ? state.organizations.find((org) => org.id === invite.organization_id)
@@ -310,11 +348,13 @@ function ensureCompanyMembership(state: State, user: User) {
   const member: OrganizationMember = {
     organization_id: organization.id,
     user_id: user.id,
-    role: firstMember ? "owner" : invite?.role ?? "member",
+    role: firstMember ? "owner" : (invite?.role ?? "member"),
     created_at,
   };
   state.organization_members.push(member);
-  state.pending_invites = state.pending_invites.filter((i) => normalizeEmail(i.email) !== normalizeEmail(user.email));
+  state.pending_invites = state.pending_invites.filter(
+    (i) => normalizeEmail(i.email) !== normalizeEmail(user.email),
+  );
   return member;
 }
 
@@ -352,7 +392,11 @@ function errorResult(error: unknown): DbResult {
   };
 }
 
-function dbError(message: string, code?: string, details?: string): Error & { code?: string; details?: string } {
+function dbError(
+  message: string,
+  code?: string,
+  details?: string,
+): Error & { code?: string; details?: string } {
   const error = new Error(message) as Error & { code?: string; details?: string };
   if (code) error.code = code;
   if (details) error.details = details;
@@ -370,12 +414,15 @@ function scopedRows(state: State, table: DbRequest["table"], userId: string): an
   if (table === "profiles") {
     if (!member) return state.profiles.filter((p) => p.id === userId);
     const ids = new Set(
-      state.organization_members.filter((m) => m.organization_id === member.organization_id).map((m) => m.user_id),
+      state.organization_members
+        .filter((m) => m.organization_id === member.organization_id)
+        .map((m) => m.user_id),
     );
     return state.profiles.filter((p) => ids.has(p.id));
   }
   if (!member) return [];
-  if (table === "organizations") return state.organizations.filter((r) => r.id === member.organization_id);
+  if (table === "organizations")
+    return state.organizations.filter((r) => r.id === member.organization_id);
   return (state[table] as any[]).filter((r) => r.organization_id === member.organization_id);
 }
 
@@ -383,8 +430,12 @@ function compareFilter(row: any, filter: Filter): boolean {
   const value = row?.[filter.column];
   if (filter.op === "eq") return value === filter.value;
   if (filter.op === "ilike") {
-    const needle = String(filter.value ?? "").replace(/^%|%$/g, "").toLowerCase();
-    return String(value ?? "").toLowerCase().includes(needle);
+    const needle = String(filter.value ?? "")
+      .replace(/^%|%$/g, "")
+      .toLowerCase();
+    return String(value ?? "")
+      .toLowerCase()
+      .includes(needle);
   }
   if (filter.op === "lt") return value != null && String(value) < String(filter.value);
   if (filter.op === "gte") return value != null && String(value) >= String(filter.value);
@@ -419,7 +470,9 @@ function decorate(state: State, table: DbRequest["table"], row: any) {
 }
 
 function applyQuery(state: State, table: DbRequest["table"], rows: any[], request: DbRequest) {
-  let out = rows.filter((row) => (request.filters ?? []).every((filter) => compareFilter(row, filter)));
+  let out = rows.filter((row) =>
+    (request.filters ?? []).every((filter) => compareFilter(row, filter)),
+  );
   for (const order of [...(request.orders ?? [])].reverse()) {
     out = [...out].sort((a, b) => {
       const av = a?.[order.column];
@@ -440,7 +493,8 @@ function applyQuery(state: State, table: DbRequest["table"], rows: any[], reques
     return { data: decorated[0], total };
   }
   if (request.mode === "maybeSingle") {
-    if (decorated.length > 1) throw dbError("Expected zero or one row, found " + decorated.length + ".");
+    if (decorated.length > 1)
+      throw dbError("Expected zero or one row, found " + decorated.length + ".");
     return { data: decorated[0] ?? null, total };
   }
   return { data: decorated, total };
@@ -486,7 +540,9 @@ function withDefaults(table: DbRequest["table"], input: any, userId: string) {
     row.evidence_map = Array.isArray(row.evidence_map) ? row.evidence_map : [];
     row.trigger_signals = Array.isArray(row.trigger_signals) ? row.trigger_signals : [];
     row.outreach_sequence = Array.isArray(row.outreach_sequence) ? row.outreach_sequence : [];
-    row.opportunity_score = Number.isFinite(Number(row.opportunity_score)) ? Math.max(0, Math.min(100, Number(row.opportunity_score))) : 0;
+    row.opportunity_score = Number.isFinite(Number(row.opportunity_score))
+      ? Math.max(0, Math.min(100, Number(row.opportunity_score)))
+      : 0;
     row.qualification_summary ??= "";
     row.subject ??= "";
     row.body ??= "";
@@ -501,7 +557,9 @@ function withDefaults(table: DbRequest["table"], input: any, userId: string) {
 }
 
 function canManageRole(actor: OrganizationMember, targetRole: Role | "admin" | "member") {
-  return targetRole === "member" ? actor.role === "owner" || actor.role === "admin" : actor.role === "owner";
+  return targetRole === "member"
+    ? actor.role === "owner" || actor.role === "admin"
+    : actor.role === "owner";
 }
 
 const WRITABLE_FIELDS: Record<string, readonly string[]> = {
@@ -510,25 +568,81 @@ const WRITABLE_FIELDS: Record<string, readonly string[]> = {
   organization_members: [],
   pending_invites: ["email", "role"],
   companies: ["name", "website", "industry", "country", "employee_range", "status", "notes"],
-  contacts: ["company_id", "full_name", "job_title", "email", "phone", "linkedin_url", "status", "last_contacted_at", "next_follow_up", "notes"],
+  contacts: [
+    "company_id",
+    "full_name",
+    "job_title",
+    "email",
+    "phone",
+    "linkedin_url",
+    "status",
+    "last_contacted_at",
+    "next_follow_up",
+    "notes",
+  ],
   activities: ["company_id", "contact_id", "type", "body"],
-  prospect_dossiers: ["domain", "company_name", "sender_website", "industry", "country", "employee_range", "why_fit", "opportunity_score", "qualification_summary", "contact_name", "contact_title", "contact_email", "email_type", "source_url", "evidence_map", "trigger_signals", "outreach_sequence", "subject", "body", "stage", "outcome", "company_id", "contact_id", "last_researched_at"],
+  prospect_dossiers: [
+    "domain",
+    "company_name",
+    "sender_website",
+    "industry",
+    "country",
+    "employee_range",
+    "why_fit",
+    "opportunity_score",
+    "qualification_summary",
+    "contact_name",
+    "contact_title",
+    "contact_email",
+    "email_type",
+    "source_url",
+    "evidence_map",
+    "trigger_signals",
+    "outreach_sequence",
+    "subject",
+    "body",
+    "stage",
+    "outcome",
+    "company_id",
+    "contact_id",
+    "last_researched_at",
+  ],
 };
-function assertWritable(table: string, payload: Record<string, unknown>, action: "insert" | "update") {
+function assertWritable(
+  table: string,
+  payload: Record<string, unknown>,
+  action: "insert" | "update",
+) {
   const allowed = new Set(WRITABLE_FIELDS[table] ?? []);
   if (action === "insert") allowed.add("organization_id");
   // The CRM currently supplies updated_at; the server owns its value.
-  if (action === "update") allowed.add("updated_at");
-  if (action === "insert") allowed.add("created_by");
+  if (table === "prospect_dossiers") allowed.add("updated_at");
+  if (action === "insert" && table === "activities") allowed.add("created_by");
   for (const key of Object.keys(payload)) {
     if (!allowed.has(key)) throw dbError("Field is not writable: " + key, "42501");
   }
 }
-function validateReferences(state: State, table: string, row: Record<string, unknown>, orgId: string) {
+function validateReferences(
+  state: State,
+  table: string,
+  row: Record<string, unknown>,
+  orgId: string,
+) {
   if (table === "contacts" || table === "activities" || table === "prospect_dossiers") {
-    if (row.company_id != null && !state.companies.some(c => c.id === row.company_id && c.organization_id === orgId))
+    if (
+      row.company_id != null &&
+      !state.companies.some((c) => c.id === row.company_id && c.organization_id === orgId)
+    )
       throw dbError("Cross-workspace or invalid company reference", "23503");
-    if (row.contact_id != null && !state.contacts.some(c => c.id === row.contact_id && c.organization_id === orgId && (row.company_id == null || c.company_id === row.company_id)))
+    if (
+      row.contact_id != null &&
+      !state.contacts.some(
+        (c) =>
+          c.id === row.contact_id &&
+          c.organization_id === orgId &&
+          (row.company_id == null || c.company_id === row.company_id),
+      )
+    )
       throw dbError("Cross-workspace or invalid contact reference", "23503");
   }
 }
@@ -541,39 +655,68 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
     if (!raw || typeof raw !== "object") throw dbError("Invalid record.");
     assertWritable(table, raw as Record<string, unknown>, "insert");
     const row = withDefaults(table, raw, userId);
+    if (table === "prospect_dossiers") row.updated_at = new Date().toISOString();
     if (table === "profiles" || table === "organizations" || table === "organization_members") {
       throw dbError("Permission denied.", "42501");
     }
     if (table === "pending_invites") {
       const actor = requireMembership(state, userId);
-      if (row.organization_id !== actor.organization_id || !canManageRole(actor, row.role)) throw dbError("Permission denied.", "42501");
+      if (row.organization_id !== actor.organization_id || !canManageRole(actor, row.role))
+        throw dbError("Permission denied.", "42501");
+      if (!["admin", "member"].includes(row.role))
+        throw dbError("Invalid invitation role.", "42501");
+      if (typeof row.email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim()))
+        throw dbError("Invalid invitation email.", "400");
       row.email = normalizeEmail(row.email);
       row.invited_by = userId;
-      if (state.pending_invites.some((i) => i.email === row.email)) throw dbError("pending_invites duplicate", "23505");
+      if (state.pending_invites.some((i) => i.email === row.email))
+        throw dbError("pending_invites duplicate", "23505");
     } else {
       const actor = requireMembership(state, userId);
-      if (row.organization_id !== actor.organization_id) throw dbError("Permission denied.", "42501");
+      if (row.organization_id !== actor.organization_id)
+        throw dbError("Permission denied.", "42501");
       if (table === "contacts") {
-        const company = state.companies.find((c) => c.id === row.company_id && c.organization_id === actor.organization_id);
+        const company = state.companies.find(
+          (c) => c.id === row.company_id && c.organization_id === actor.organization_id,
+        );
         if (!company) throw dbError("contacts company reference is invalid", "23503", "contacts");
       }
       if (table === "activities") {
-        const company = state.companies.find((c) => c.id === row.company_id && c.organization_id === actor.organization_id);
+        const company = state.companies.find(
+          (c) => c.id === row.company_id && c.organization_id === actor.organization_id,
+        );
         if (!company) throw dbError("activities company reference is invalid", "23503");
-        if (row.contact_id && !state.contacts.some((c) => c.id === row.contact_id && c.organization_id === actor.organization_id)) {
+        if (
+          row.contact_id &&
+          !state.contacts.some(
+            (c) => c.id === row.contact_id && c.organization_id === actor.organization_id,
+          )
+        ) {
           throw dbError("activities contact reference is invalid", "23503");
         }
       }
       if (table === "prospect_dossiers") {
-        row.domain = String(row.domain ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
-        if (!row.domain || !row.domain.includes(".")) throw dbError("prospect dossier domain is invalid", "400");
-        row.sender_website = normalizeWebsite(row.sender_website) ?? String(row.sender_website ?? "");
-        if (state.prospect_dossiers.some((d) => d.organization_id === actor.organization_id && d.domain === row.domain)) {
+        row.domain = String(row.domain ?? "")
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split(/[/?#]/)[0];
+        if (!row.domain || !row.domain.includes("."))
+          throw dbError("prospect dossier domain is invalid", "400");
+        row.sender_website =
+          normalizeWebsite(row.sender_website) ?? String(row.sender_website ?? "");
+        if (
+          state.prospect_dossiers.some(
+            (d) => d.organization_id === actor.organization_id && d.domain === row.domain,
+          )
+        ) {
           throw dbError("prospect dossier already exists", "23505");
         }
       }
     }
-    if (table !== "pending_invites") validateReferences(state, table, row, requireMembership(state, userId).organization_id);
+    if (table !== "pending_invites")
+      validateReferences(state, table, row, requireMembership(state, userId).organization_id);
     (state[table] as any[]).push(row);
     inserted.push(row);
   }
@@ -584,20 +727,31 @@ function updateRows(state: State, request: DbRequest, userId: string): any[] {
   const table = request.table;
   const patch = (request.payload ?? {}) as Record<string, unknown>;
   assertWritable(table, patch, "update");
+  // Invitations are created/deleted through role-checked paths. Editing one
+  // could otherwise turn a member invitation into an admin invitation.
+  if (table === "pending_invites")
+    throw dbError("Delete and recreate invitations to change them.", "42501");
   const candidates = scopedRows(state, table, userId).filter((row) =>
     (request.filters ?? []).every((filter) => compareFilter(row, filter)),
   );
   const member = memberFor(state, userId);
   if (table === "organization_members") throw dbError("Use the role update action.", "42501");
-  if (table === "organizations" && member?.role !== "owner") throw dbError("Permission denied.", "42501");
-  if (table === "profiles" && candidates.some((p) => p.id !== userId)) throw dbError("Permission denied.", "42501");
+  if (table === "organizations" && member?.role !== "owner")
+    throw dbError("Permission denied.", "42501");
+  if (table === "profiles" && candidates.some((p) => p.id !== userId))
+    throw dbError("Permission denied.", "42501");
   const allowed = table === "profiles" ? ["full_name"] : null;
   for (const row of candidates) {
     if (member) validateReferences(state, table, { ...row, ...patch }, member.organization_id);
     for (const [key, value] of Object.entries(patch)) {
       if (["id", "organization_id", "created_at", "user_id"].includes(key)) continue;
       if (allowed && !allowed.includes(key)) continue;
-      row[key] = key === "updated_at" ? new Date().toISOString() : table === "companies" && key === "website" ? normalizeWebsite(value) : value;
+      row[key] =
+        key === "updated_at"
+          ? new Date().toISOString()
+          : table === "companies" && key === "website"
+            ? normalizeWebsite(value)
+            : value;
     }
   }
   return candidates;
@@ -617,7 +771,9 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
       if (!canManageRole(actor, target.role)) continue;
       if (
         target.role === "owner" &&
-        state.organization_members.filter((m) => m.organization_id === actor.organization_id && m.role === "owner").length <= 1
+        state.organization_members.filter(
+          (m) => m.organization_id === actor.organization_id && m.role === "owner",
+        ).length <= 1
       ) {
         throw dbError("LAST_OWNER: cannot remove the last owner");
       }
@@ -633,8 +789,12 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
   }
 
   if (table === "pending_invites") {
-    const removable = (candidates as PendingInvite[]).filter((invite) => canManageRole(actor, invite.role));
-    state.pending_invites = state.pending_invites.filter((row) => !removable.some((i) => i.id === row.id));
+    const removable = (candidates as PendingInvite[]).filter((invite) =>
+      canManageRole(actor, invite.role),
+    );
+    state.pending_invites = state.pending_invites.filter(
+      (row) => !removable.some((i) => i.id === row.id),
+    );
     return removable;
   }
 
@@ -650,10 +810,12 @@ function deleteRows(state: State, request: DbRequest, userId: string): any[] {
 
   if (table === "contacts") {
     const contactIds = new Set((candidates as Contact[]).map((c) => c.id));
-    for (const activity of state.activities) if (activity.contact_id && contactIds.has(activity.contact_id)) activity.contact_id = null;
+    for (const activity of state.activities)
+      if (activity.contact_id && contactIds.has(activity.contact_id)) activity.contact_id = null;
   }
 
-  if (table === "profiles" || table === "organizations") throw dbError("Permission denied.", "42501");
+  if (table === "profiles" || table === "organizations")
+    throw dbError("Permission denied.", "42501");
 
   const ids = new Set(candidates.map((row) => row.id ?? row.organization_id + ":" + row.user_id));
   (state as any)[table] = (state[table] as any[]).filter(
@@ -682,7 +844,11 @@ export async function executeDbRequest(userId: string, request: DbRequest): Prom
       const state = await readState();
       const scoped = scopedRows(state, request.table, userId);
       const { data, total } = applyQuery(state, request.table, scoped, request);
-      return { data: request.head ? null : data, error: null, count: request.countExact ? total : null };
+      return {
+        data: request.head ? null : data,
+        error: null,
+        count: request.countExact ? total : null,
+      };
     }
     return await mutateState((state) => {
       let changed: any[] = [];
@@ -715,11 +881,18 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
       if (fn === "workspace_exists") return state.organizations.length > 0;
 
       if (fn === "claim_invite") {
+        // Legacy members keep their existing access without claiming anything.
+        if (memberFor(state, userId)) return null;
         if (!user.email_verified_at) throw dbError("EMAIL_NOT_CONFIRMED", "42501");
         ensureCompanyMembership(state, user);
         if (memberFor(state, userId)) return null;
         const invite = state.pending_invites.find((i) => i.email === user.email);
         if (!invite) return null;
+        if (
+          !["admin", "member"].includes(invite.role) ||
+          !state.organizations.some((org) => org.id === invite.organization_id)
+        )
+          throw dbError("Invalid invitation.", "42501");
         state.organization_members.push({
           organization_id: invite.organization_id,
           user_id: userId,
@@ -736,7 +909,11 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
         if (!name) throw dbError("NAME_REQUIRED");
         if (memberFor(state, userId)) throw dbError("ALREADY_MEMBER");
         if (state.organizations.length) throw dbError("WORKSPACE_EXISTS");
-        const organization: Organization = { id: randomUUID(), name, created_at: new Date().toISOString() };
+        const organization: Organization = {
+          id: randomUUID(),
+          name,
+          created_at: new Date().toISOString(),
+        };
         state.organizations.push(organization);
         state.organization_members.push({
           organization_id: organization.id,
@@ -760,7 +937,9 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
         if (
           target.role === "owner" &&
           newRole !== "owner" &&
-          state.organization_members.filter((m) => m.organization_id === actor.organization_id && m.role === "owner").length <= 1
+          state.organization_members.filter(
+            (m) => m.organization_id === actor.organization_id && m.role === "owner",
+          ).length <= 1
         ) {
           throw dbError("LAST_OWNER: cannot demote the last owner");
         }
@@ -771,7 +950,8 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
       if (fn === "seed_sample_data") {
         const actor = requireMembership(state, userId);
         if (!["owner", "admin"].includes(actor.role)) throw dbError("NOT_ADMIN");
-        if (state.companies.some((c) => c.organization_id === actor.organization_id)) throw dbError("ORG_NOT_EMPTY");
+        if (state.companies.some((c) => c.organization_id === actor.organization_id))
+          throw dbError("ORG_NOT_EMPTY");
         return null;
       }
 
@@ -784,10 +964,11 @@ export async function executeRpc(userId: string, fn: string, args: Record<string
   }
 }
 
-
 export async function prospectFeedbackForOrganization(organizationId: string) {
   const state = await readState();
-  const rows = state.prospect_dossiers.filter((d) => d.organization_id === organizationId && d.outcome !== "unknown");
+  const rows = state.prospect_dossiers.filter(
+    (d) => d.organization_id === organizationId && d.outcome !== "unknown",
+  );
   const positives = rows.filter((d) => ["replied", "interested", "customer"].includes(d.outcome));
   const negatives = rows.filter((d) => d.outcome === "not_relevant");
 
@@ -822,7 +1003,6 @@ export async function datastoreHealth() {
   return { ok: true as const, datastore: "render-key-value" as const };
 }
 
-
 export async function userIdByEmail(email: string): Promise<string | null> {
   const state = await readState();
   return state.users.find((user) => user.email === normalizeEmail(email))?.id ?? null;
@@ -837,9 +1017,7 @@ export async function resetPasswordForUser(userId: string, password: string): Pr
   });
 }
 
-
 export async function organizationIdsForInternalJobs() {
   const state = await readState();
   return state.organizations.map((organization) => organization.id);
 }
-

@@ -73,7 +73,6 @@ export const rpcRequest = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => executeRpc(context.userId, data.fn, data.args));
 
-
 export const requestPasswordResetRequest = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => z.object({ email: z.string().email() }).parse(data))
   .handler(async ({ data }) => {
@@ -83,10 +82,12 @@ export const requestPasswordResetRequest = createServerFn({ method: "POST" })
 
 export const confirmPasswordResetRequest = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) =>
-    z.object({
-      token: z.string().min(20),
-      password: z.string().min(8),
-    }).parse(data),
+    z
+      .object({
+        token: z.string().min(20),
+        password: z.string().min(8),
+      })
+      .parse(data),
   )
   .handler(async ({ data }) => {
     await confirmPasswordReset(data.token, data.password);
@@ -95,14 +96,16 @@ export const confirmPasswordResetRequest = createServerFn({ method: "POST" })
   });
 
 export const requestEmailVerificationRequest = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => z.object({ email: z.string().email() }).parse(data))
-  .handler(async ({ data }) => {
-    await requestEmailVerification(data.email);
+  .middleware([requireRenderUser])
+  .handler(async ({ context }) => {
+    await requestEmailVerification(context.email);
     return { ok: true };
   });
 
 export const confirmEmailVerificationRequest = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => z.object({ token: z.string().min(32) }).parse(data))
+  .inputValidator((data: unknown) =>
+    z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).parse(data),
+  )
   .handler(async ({ data }) => {
     await confirmEmailVerification(data.token);
     return { ok: true };

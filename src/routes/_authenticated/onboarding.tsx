@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { renderDb } from "@/integrations/render/client";
 import { resolveMembership, signOut } from "@/lib/session";
+import { requestEmailVerificationRequest } from "@/integrations/render/server.functions";
 import { friendlyError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,10 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({
     meta: [
       { title: "Get started — SPA Intelligence" },
-      { name: "description", content: "Set up the private Solar Power Australia intelligence workspace." },
+      {
+        name: "description",
+        content: "Set up the private Solar Power Australia intelligence workspace.",
+      },
       { property: "og:title", content: "Get started — SPA Intelligence" },
       { property: "og:description", content: "Set up or join your team's workspace." },
     ],
@@ -26,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
   component: Onboarding,
 });
 
-type State = "loading" | "no_org" | "not_invited" | "error";
+type State = "loading" | "verify_email" | "no_org" | "not_invited" | "error";
 
 function Onboarding() {
   const navigate = useNavigate();
@@ -62,6 +66,18 @@ function Onboarding() {
     navigate({ to: "/prospect", replace: true });
   }
 
+  async function sendVerification() {
+    setBusy(true);
+    try {
+      await requestEmailVerificationRequest();
+      toast.success("Verification email sent. Open the link within 30 minutes.");
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function out() {
     await signOut(qc);
     navigate({ to: "/auth", replace: true });
@@ -70,20 +86,44 @@ function Onboarding() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4">
       <div className="w-full max-w-md rounded-lg border bg-card p-8">
-        <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">SPA Intelligence</div>
+        <div className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+          SPA Intelligence
+        </div>
         {state === "loading" && (
           <div className="mt-4 space-y-3">
             <Skeleton className="h-7 w-2/3" />
             <Skeleton className="h-4 w-full" />
           </div>
         )}
+        {state === "verify_email" && (
+          <div className="mt-2 space-y-4">
+            <h1 className="text-xl font-semibold">Verify your email</h1>
+            <p className="text-sm text-muted-foreground">
+              Confirm access to {user.email} before joining or creating a workspace.
+            </p>
+            <Button className="w-full" onClick={sendVerification} disabled={busy}>
+              {busy ? "Sending…" : "Send verification email"}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => window.location.reload()}>
+              I've verified my email
+            </Button>
+          </div>
+        )}
         {state === "no_org" && (
           <form onSubmit={create} className="mt-2 space-y-4">
             <h1 className="text-xl font-semibold">Create your workspace</h1>
-            <p className="text-sm text-muted-foreground">There is one workspace for your team. You'll be its owner.</p>
+            <p className="text-sm text-muted-foreground">
+              There is one workspace for your team. You'll be its owner.
+            </p>
             <div className="space-y-1.5">
               <Label htmlFor="org">Workspace name</Label>
-              <Input id="org" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={120} />
+              <Input
+                id="org"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+                maxLength={120}
+              />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Creating…" : "Create workspace"}
@@ -94,7 +134,8 @@ function Onboarding() {
           <>
             <h1 className="mt-2 text-xl font-semibold">Ask the owner to invite this email.</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Signed in as <span className="font-mono text-foreground">{user.email}</span>. Once invited, sign in again.
+              Signed in as <span className="font-mono text-foreground">{user.email}</span>. Once
+              invited, sign in again.
             </p>
           </>
         )}
