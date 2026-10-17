@@ -32,13 +32,6 @@ function tenderCoreHealth() {
 export const healthCheck = createServerFn({ method: "GET" }).handler(async () => {
   const datastore = await datastoreHealth();
   const tenderCore = tenderCoreHealth();
-  return {
-    ok: datastore.ok && tenderCore.ok,
-    service: "spa-intelligence",
-    hosting: "render",
-    datastore,
-    tenderCore,
-    environmentAiFallbackConfigured: Boolean(process.env["OPENROUTER_API_KEY"]),
-    openRouterByokSupported: true,
-  };
+  // Public health responses expose liveness only, not infrastructure or AI settings.
+  return { ok: datastore.ok && tenderCore.ok };
 });
