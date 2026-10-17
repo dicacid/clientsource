@@ -5,7 +5,11 @@ export const AUTOMATIC_ACCESS_DOMAINS = [
   "elmofo.com.au",
 ] as const;
 
-const approvedDomains = new Set<string>(AUTOMATIC_ACCESS_DOMAINS);
+// Override with a comma-separated allow-list at deployment time. An empty
+// override disables automatic domain membership; existing memberships remain.
+const configured = process.env["SPA_AUTO_ACCESS_DOMAINS"];
+const approvedDomains = new Set<string>((configured === undefined ? [...AUTOMATIC_ACCESS_DOMAINS] : configured.split(","))
+  .map(domain => domain.trim().toLowerCase()).filter(Boolean));
 
 export function hasAutomaticCompanyAccess(email: string): boolean {
   const normalized = email.trim().toLowerCase();
