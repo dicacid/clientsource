@@ -5,7 +5,7 @@ import { hasAutomaticCompanyAccess } from "../../lib/company-access";
 const STATE_KEY = process.env["STATE_KEY"] || "spa-intelligence:state:v1";
 
 type Role = "owner" | "admin" | "member";
-type User = { id: string; email: string; password_hash: string; created_at: string };
+type User = { id: string; email: string; password_hash: string; created_at: string; email_verified_at?: string | null };
 type Profile = { id: string; full_name: string | null; created_at: string };
 type Organization = { id: string; name: string; created_at: string };
 type OrganizationMember = { organization_id: string; user_id: string; role: Role; created_at: string };
@@ -243,7 +243,7 @@ function publicUser(user: User) {
   return {
     id: user.id,
     email: user.email,
-    email_confirmed_at: user.created_at,
+    email_confirmed_at: user.email_verified_at ?? null,
     created_at: user.created_at,
   };
 }
@@ -271,6 +271,14 @@ export async function signIn(email: string, password: string) {
   });
 }
 
+export async function markVerifiedEmail(userId: string): Promise<void> {
+  await mutateState(state => {
+    const user = state.users.find(u => u.id === userId);
+    if (!user) throw new Error("Invalid verification request.");
+    user.email_verified_at ??= new Date().toISOString();
+  });
+}
+
 export async function userById(userId: string) {
   const state = await readState();
   const user = state.users.find((u) => u.id === userId);
@@ -284,7 +292,7 @@ function memberFor(state: State, userId: string) {
 /** Keep data scoped internally while approved company accounts join automatically. */
 function ensureCompanyMembership(state: State, user: User) {
   const existing = memberFor(state, user.id);
-  if (existing || !hasAutomaticCompanyAccess(user.email)) return existing;
+  if (existing || !user.email_verified_at || !hasAutomaticCompanyAccess(user.email)) return existing;
 
   const invite = state.pending_invites.find((i) =>
     normalizeEmail(i.email) === normalizeEmail(user.email) &&
@@ -322,7 +330,7 @@ export async function membershipForUser(userId: string) {
   const membership = membershipDetails(state, userId);
   if (membership) return membership;
   const user = state.users.find((u) => u.id === userId);
-  if (!user || !hasAutomaticCompanyAccess(user.email)) return null;
+  if (!user || !user.email_verified_at || !hasAutomaticCompanyAccess(user.email)) return null;
   // Existing sessions gain access too, without waiting for another sign-in.
   return mutateState((latest) => {
     const currentUser = latest.users.find((u) => u.id === userId);
