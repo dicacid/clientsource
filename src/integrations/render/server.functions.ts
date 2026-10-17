@@ -12,6 +12,7 @@ import {
 import { requireRenderUser } from "./auth-middleware";
 import { clearSessionCookie, setSessionCookie } from "./session.server";
 import { confirmPasswordReset, requestPasswordReset } from "./password-reset.server";
+import { requestEmailVerification, confirmEmailVerification } from "./email-verification.server";
 
 const authSchema = z.discriminatedUnion("action", [
   z.object({
@@ -90,5 +91,19 @@ export const confirmPasswordResetRequest = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await confirmPasswordReset(data.token, data.password);
     clearSessionCookie();
+    return { ok: true };
+  });
+
+export const requestEmailVerificationRequest = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ email: z.string().email() }).parse(data))
+  .handler(async ({ data }) => {
+    await requestEmailVerification(data.email);
+    return { ok: true };
+  });
+
+export const confirmEmailVerificationRequest = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ token: z.string().min(32) }).parse(data))
+  .handler(async ({ data }) => {
+    await confirmEmailVerification(data.token);
     return { ok: true };
   });
