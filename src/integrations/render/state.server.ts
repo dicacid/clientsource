@@ -496,12 +496,42 @@ function canManageRole(actor: OrganizationMember, targetRole: Role | "admin" | "
   return targetRole === "member" ? actor.role === "owner" || actor.role === "admin" : actor.role === "owner";
 }
 
+const WRITABLE_FIELDS: Record<string, readonly string[]> = {
+  profiles: ["full_name"],
+  organizations: ["name"],
+  organization_members: [],
+  pending_invites: ["email", "role"],
+  companies: ["name", "website", "industry", "country", "employee_range", "status", "notes"],
+  contacts: ["company_id", "full_name", "job_title", "email", "phone", "linkedin_url", "status", "last_contacted_at", "next_follow_up", "notes"],
+  activities: ["company_id", "contact_id", "type", "body"],
+  prospect_dossiers: ["domain", "company_name", "sender_website", "industry", "country", "employee_range", "why_fit", "opportunity_score", "qualification_summary", "contact_name", "contact_title", "contact_email", "email_type", "source_url", "evidence_map", "trigger_signals", "outreach_sequence", "subject", "body", "stage", "outcome", "company_id", "contact_id", "last_researched_at"],
+};
+function assertWritable(table: string, payload: Record<string, unknown>, action: "insert" | "update") {
+  const allowed = new Set(WRITABLE_FIELDS[table] ?? []);
+  if (action === "insert") allowed.add("organization_id");
+  // The CRM currently supplies updated_at; the server owns its value.
+  if (action === "update") allowed.add("updated_at");
+  if (action === "insert") allowed.add("created_by");
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) throw dbError("Field is not writable: " + key, "42501");
+  }
+}
+function validateReferences(state: State, table: string, row: Record<string, unknown>, orgId: string) {
+  if (table === "contacts" || table === "activities" || table === "prospect_dossiers") {
+    if (row.company_id != null && !state.companies.some(c => c.id === row.company_id && c.organization_id === orgId))
+      throw dbError("Cross-workspace or invalid company reference", "23503");
+    if (row.contact_id != null && !state.contacts.some(c => c.id === row.contact_id && c.organization_id === orgId && (row.company_id == null || c.company_id === row.company_id)))
+      throw dbError("Cross-workspace or invalid contact reference", "23503");
+  }
+}
+
 function insertRows(state: State, request: DbRequest, userId: string): any[] {
   const table = request.table;
   const inputs = Array.isArray(request.payload) ? request.payload : [request.payload];
   const inserted: any[] = [];
   for (const raw of inputs) {
     if (!raw || typeof raw !== "object") throw dbError("Invalid record.");
+    assertWritable(table, raw as Record<string, unknown>, "insert");
     const row = withDefaults(table, raw, userId);
     if (table === "profiles" || table === "organizations" || table === "organization_members") {
       throw dbError("Permission denied.", "42501");
@@ -535,6 +565,7 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
         }
       }
     }
+    if (table !== "pending_invites") validateReferences(state, table, row, requireMembership(state, userId).organization_id);
     (state[table] as any[]).push(row);
     inserted.push(row);
   }
@@ -544,6 +575,7 @@ function insertRows(state: State, request: DbRequest, userId: string): any[] {
 function updateRows(state: State, request: DbRequest, userId: string): any[] {
   const table = request.table;
   const patch = (request.payload ?? {}) as Record<string, unknown>;
+  assertWritable(table, patch, "update");
   const candidates = scopedRows(state, table, userId).filter((row) =>
     (request.filters ?? []).every((filter) => compareFilter(row, filter)),
   );
@@ -553,10 +585,11 @@ function updateRows(state: State, request: DbRequest, userId: string): any[] {
   if (table === "profiles" && candidates.some((p) => p.id !== userId)) throw dbError("Permission denied.", "42501");
   const allowed = table === "profiles" ? ["full_name"] : null;
   for (const row of candidates) {
+    if (member) validateReferences(state, table, { ...row, ...patch }, member.organization_id);
     for (const [key, value] of Object.entries(patch)) {
       if (["id", "organization_id", "created_at", "user_id"].includes(key)) continue;
       if (allowed && !allowed.includes(key)) continue;
-      row[key] = table === "companies" && key === "website" ? normalizeWebsite(value) : value;
+      row[key] = key === "updated_at" ? new Date().toISOString() : table === "companies" && key === "website" ? normalizeWebsite(value) : value;
     }
   }
   return candidates;
