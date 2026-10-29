@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main, spa-intelligence-demo]
+    branches: [main, spa-intelligence-demo, energy-market-lab]
   pull_request:
 
 permissions:
