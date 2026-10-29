@@ -140,7 +140,7 @@ export async function collectLivePolicyPulse() {
     try {
       const response = await fetch(source.url, {
         signal: AbortSignal.timeout(10000),
-        redirect: "follow",
+        redirect: "manual",
         headers: { Accept: "text/html", "User-Agent": "EnergyMarketLab/1.0 (policy monitoring; public information)" },
       });
       if (!response.ok) return { id: source.id, url: source.url, status: "unavailable" as const, httpStatus: response.status, checkedAt, note: "Source returned a non-success HTTP response." };
