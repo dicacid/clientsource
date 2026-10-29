@@ -95,6 +95,23 @@ function DecisionRoom(){
     </div>
    </div>
    {error&&<div role="alert" className="mt-5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">{error}</div>}
+   <section className="mt-5 rounded-xl border border-white/10 bg-[#121d2b] p-5">
+    <div className="font-mono text-xs uppercase tracking-widest text-cyan-300">Executive intelligence · Industry-verified priorities</div>
+    <h2 className="mt-2 text-xl font-semibold">What leading energy operators actually care about</h2>
+    <p className="mt-2 text-sm text-slate-400">Public executive statements and industry analysis. These are market context, not claims about your company or the person you're meeting.</p>
+    <div className="mt-4 grid gap-3 md:grid-cols-3">
+      {[
+        {tag:"CEO / Market expansion",title:"Turn policy timing into a first-mover commercial offer",detail:"Venergy Solar Australia publicly highlights the newly expanded 100 kW–1 MW segment as a meaningful opening for commercial rooftop opportunities.",source:"Venergy Solar Australia · LinkedIn",url:"https://www.linkedin.com/posts/venergysolaraustralia_were-in-last-weeks-the-australian-financial-activity-7503203017928876032-7onx"},
+        {tag:"Commercial energy CEO",title:"Customers want integrated energy outcomes",detail:"NRG-ONE CEO Carl Duncan discusses expanding beyond solar-only systems toward storage and flexible loads.",source:"Carl Duncan · LinkedIn",url:"https://au.linkedin.com/in/carl-duncan-energyguy"},
+        {tag:"Industry research",title:"Find financeable projects, not impressive-looking leads",detail:"IEEFA identifies complex tariffs, investment barriers and unpredictable grid connection as obstacles holding back Australian business rooftop solar.",source:"IEEFA · June 2026",url:"https://ieefa.org/resources/unlocking-clean-energy-potential-australian-business-rooftops"},
+      ].map(item=><article key={item.title} className="rounded-lg border border-white/10 bg-[#18283a] p-4">
+       <div className="text-[11px] uppercase tracking-wide text-cyan-300">{item.tag}</div>
+       <h3 className="mt-2 text-sm font-semibold leading-6">{item.title}</h3>
+       <p className="mt-2 text-xs leading-5 text-slate-300">{item.detail}</p>
+       <a href={item.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs text-cyan-300 underline">{item.source}<ArrowUpRight size={13}/></a>
+      </article>)}
+    </div>
+   </section>
    <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1.15fr]">
     <div className="rounded-xl border border-white/10 bg-[#121d2b] p-5">
      <div className="font-mono text-xs uppercase tracking-widest text-cyan-300">01 · Market inflection point</div>
