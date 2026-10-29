@@ -1,5 +1,5 @@
 {
-  "name": "spa-intelligence",
+  "name": "solar-intelligence",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -95,7 +95,7 @@
     "vite": "8.1.5"
   },
   "version": "0.1.0",
-  "description": "Private commercial-intelligence platform for Solar Power Australia with evidence-backed research and OpenRouter BYOK.",
+  "description": "Independent source-backed energy market and commercial decision intelligence by Revealing Mind AI.",
   "license": "MIT",
   "repository": {
     "type": "git",
