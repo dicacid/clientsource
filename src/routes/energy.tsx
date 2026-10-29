@@ -86,6 +86,7 @@ function EnergyMarketLab() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <a href="/decision-room" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-cyan-400/60 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 hover:bg-cyan-400/20">CEO Decision Room →</a>
+            <a href="/energy-tenders" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-semibold text-slate-100 hover:bg-white/10">Live tender radar →</a>
             <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 text-sm hover:bg-white/10 disabled:opacity-60">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh live sources</button>
             <button type="button" onClick={download} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-cyan-400 px-4 text-sm font-semibold text-slate-950 hover:bg-cyan-300"><Download className="h-4 w-4" /> Export evidence</button>
           </div>
