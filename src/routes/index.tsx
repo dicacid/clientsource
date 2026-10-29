@@ -3,13 +3,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "SPA Intelligence — Commercial intelligence for Solar Power Australia" },
-      { name: "description", content: "Private commercial-intelligence workspace for Solar Power Australia." },
-      { property: "og:title", content: "SPA Intelligence — Commercial intelligence for Solar Power Australia" },
-      { property: "og:description", content: "Private commercial-intelligence workspace for Solar Power Australia." },
+      { title: "Energy Market Lab | Live energy opportunity intelligence" },
+      { name: "description", content: "Independent commercial energy intelligence with live evidence checks and scenario economics." },
+      { property: "og:title", content: "Energy Market Lab" },
+      { property: "og:description", content: "Verified regulatory signals, commercial opportunities, and boardroom decision support." },
     ],
   }),
   beforeLoad: () => {
-    throw redirect({ to: "/prospect" });
+    throw redirect({ to: "/energy" });
   },
 });
