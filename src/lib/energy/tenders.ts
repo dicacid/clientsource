@@ -72,8 +72,9 @@ export function qualifyEnergyTender(row: RawTender, checkedAt = new Date().toISO
     ],
   };
 }
-let cache: {until:number; data:Awaited<ReturnType<typeof scanLiveEnergyTenders>>}|null=null;
-export async function scanLiveEnergyTenders() {
+export type TenderScanResult = {checkedAt:string;tenders:EnergyTender[];checks:TenderSourceCheck[];mode:string;note:string};
+let cache: {until:number; data:TenderScanResult}|null=null;
+export async function scanLiveEnergyTenders():Promise<TenderScanResult> {
   if(cache && Date.now()<cache.until)return cache.data;
   const checkedAt=new Date().toISOString();
   const fetched=await Promise.all(SOURCES.map(async source=>{
