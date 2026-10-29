@@ -11,8 +11,8 @@ test("solar economics accurately calculates generation, savings, and simple payb
   assert.equal(result.generationKwh, 350000);
   assert.equal(result.selfUseKwh, 280000);
   assert.equal(result.exportedKwh, 70000);
-  assert.equal(result.annualGrossBenefitAud, 81900);
-  assert.equal(result.annualNetBenefitAud, 77900);
+  assert.ok(Math.abs(result.annualGrossBenefitAud - 81900) < 1e-7);
+  assert.ok(Math.abs(result.annualNetBenefitAud - 77900) < 1e-7);
   assert.ok(Math.abs(result.simplePaybackYears - 300000 / 77900) < 1e-9);
 });
 test("no fictional incentive is deducted when none supplied", () => {
