@@ -11,7 +11,7 @@ import {
   parseAustralianLocalDate,
   classifyClosing,
   type RawTender,
-} from "../spa/tenders";
+} from "../spa/tenders.ts";
 
 export type EnergyTender = {
   id: string; title: string; issuer: string; sourceName: string; sourceUrl: string;
